@@ -1,0 +1,52 @@
+# Ameba configuration for bidi Crystal port
+# Based on Crystal Forge baseline template
+
+Version: 1.0.0
+
+# Enable/disable rules
+AllCops:
+  Enabled: true
+
+# Rule-specific configurations
+Style/RedundantBegin:
+  Enabled: true
+
+Style/RedundantReturn:
+  Enabled: true
+
+Style/UnlessElse:
+  Enabled: true
+
+Lint/UnusedArgument:
+  Enabled: true
+
+Lint/ShadowingOuterLocalVar:
+  Enabled: true
+
+Lint/DuplicatedRequire:
+  Enabled: true
+
+Performance/FlattenOnce:
+  Enabled: true
+
+Performance/Size:
+  Enabled: true
+
+Performance/CompactMap:
+  Enabled: true
+
+# Exclude paths
+Excluded:
+  - lib/**/*
+  - temp/**/*
+  - vendor/**/*
+  - .crystal-cache/**/*
+
+# Complexity exclusions (algorithmic complexity from upstream)
+Metrics/CyclomaticComplexity:
+  Excluded:
+    - src/bidi/explicit.cr
+    - src/bidi/implicit.cr
+    - src/bidi/info.cr
+    - src/bidi/prepare.cr
+    - src/bidi/utf16.cr
