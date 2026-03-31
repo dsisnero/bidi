@@ -96,7 +96,7 @@ require "bidi"
 # Determine base direction of text
 samples = [
   "Hello World",           # LTR
-  "שלום עולם",             # RTL  
+  "שלום עולם",             # RTL
   "123",                   # Mixed (neutral)
   "Hello 123",             # LTR (first strong character is LTR)
   "مرحبا 123",             # RTL (first strong character is RTL)
@@ -129,7 +129,7 @@ ui_texts = [
 ui_texts.each do |text|
   info = Bidi::ParagraphBidiInfo.new(text, nil)
   reordered = info.reorder_line(0...text.bytesize)
-  
+
   puts "UI Display:"
   puts "  Original:  #{text}"
   puts "  Reordered: #{reordered}"
@@ -147,20 +147,20 @@ require "bidi"
 def process_user_input(input : String)
   # Determine if input contains RTL content
   direction = Bidi.get_base_direction(input)
-  
+
   case direction
   when Bidi::Direction::Ltr
     puts "Input is primarily LTR: #{input}"
   when Bidi::Direction::Rtl
     puts "Input is primarily RTL: #{input}"
-    
+
     # Reorder for proper display
     info = Bidi::ParagraphBidiInfo.new(input, nil)
     reordered = info.reorder_line(0...input.bytesize)
     puts "Display as: #{reordered}"
   when Bidi::Direction::Mixed
     puts "Input has mixed direction: #{input}"
-    
+
     # Analyze and reorder mixed content
     info = Bidi::BidiInfo.new(input, nil)
     para = info.paragraphs[0]
@@ -184,13 +184,13 @@ require "bidi"
 def prepare_text_for_layout(text : String, width : Int32) : Array(String)
   lines = [] of String
   current_line = ""
-  
+
   info = Bidi::BidiInfo.new(text, nil)
   para = info.paragraphs[0]
-  
+
   # Simple word wrapping (in real implementation, use proper text layout)
   words = text.split(' ')
-  
+
   words.each do |word|
     if (current_line + " " + word).size > width
       # Reorder current line before adding to output
@@ -203,14 +203,14 @@ def prepare_text_for_layout(text : String, width : Int32) : Array(String)
       current_line += word if current_line.empty?
     end
   end
-  
+
   # Add last line
   unless current_line.empty?
     line_info = Bidi::ParagraphBidiInfo.new(current_line, nil)
     reordered = line_info.reorder_line(0...current_line.bytesize)
     lines << reordered
   end
-  
+
   lines
 end
 
@@ -241,16 +241,16 @@ texts = [
 # Pre-allocate reusable analyzer for similar texts
 def analyze_batch(texts : Array(String))
   results = [] of Tuple(String, Bidi::Direction, String)
-  
+
   texts.each do |text|
     # Use ParagraphBidiInfo for single-paragraph texts (faster)
     info = Bidi::ParagraphBidiInfo.new(text, nil)
     direction = Bidi.get_base_direction(text)
     reordered = info.reorder_line(0...text.bytesize)
-    
+
     results << {text, direction, reordered}
   end
-  
+
   results
 end
 
@@ -292,22 +292,22 @@ def test_bidi_functionality
       expected_reordered: ""
     }
   ]
-  
+
   test_cases.each_with_index do |test_case, i|
     input = test_case[:input]
     expected_direction = test_case[:expected_direction]
     expected_reordered = test_case[:expected_reordered]
-    
+
     # Test direction detection
     actual_direction = Bidi.get_base_direction(input)
-    
+
     # Test reordering
     info = Bidi::ParagraphBidiInfo.new(input, nil)
     actual_reordered = info.reorder_line(0...input.bytesize)
-    
+
     direction_ok = actual_direction == expected_direction
     reorder_ok = actual_reordered == expected_reordered
-    
+
     puts "Test #{i + 1}: #{direction_ok && reorder_ok ? 'PASS' : 'FAIL'}"
     puts "  Input: '#{input}'"
     puts "  Direction: expected #{expected_direction}, got #{actual_direction}" unless direction_ok
@@ -332,10 +332,10 @@ require "bidi"
 # Middleware to handle RTL text in responses
 class BidiMiddleware
   include HTTP::Handler
-  
+
   def call(context)
     call_next(context)
-    
+
     # Check if response contains text that might need bidi processing
     content_type = context.response.headers["Content-Type"]?
     if content_type && content_type.includes?("text/html")
@@ -352,12 +352,12 @@ add_handler BidiMiddleware.new
 # API endpoint that returns text with proper bidi handling
 get "/api/text/:input" do |env|
   input = env.params.url["input"]
-  
+
   # Analyze and reorder text
   info = Bidi::ParagraphBidiInfo.new(input, nil)
   reordered = info.reorder_line(0...input.bytesize)
   direction = Bidi.get_base_direction(input)
-  
+
   {
     original: input,
     reordered: reordered,
@@ -387,14 +387,14 @@ class Message
   property content : String
   property content_display : String
   property direction : String
-  
+
   def initialize(@id, @content)
     # Process for display
     info = Bidi::ParagraphBidiInfo.new(@content, nil)
     @content_display = info.reorder_line(0...@content.bytesize)
     @direction = Bidi.get_base_direction(@content).to_s
   end
-  
+
   def to_json(json : JSON::Builder)
     json.object do
       json.field "id", @id

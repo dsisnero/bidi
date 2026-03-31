@@ -61,7 +61,7 @@ bidi_info.paragraphs.each_with_index do |para, i|
   puts "    Range: #{para.range}"
   puts "    Level: #{para.level.value} (#{para.level.rtl? ? "RTL" : "LTR"})"
   puts "    Direction: #{para.direction}"
-  
+
   # Reorder this paragraph
   reordered = bidi_info.reorder_line(para, para.range)
   puts "    Reordered: '#{reordered}'"
@@ -204,12 +204,12 @@ edge_cases = [
 
 edge_cases.each do |text|
   puts "\nText: #{text.inspect}"
-  
+
   # Should not raise exceptions
   begin
     direction = Bidi.get_base_direction(text)
     puts "  Base direction: #{direction}"
-    
+
     if !text.empty? && !text.strip.empty?
       info = Bidi::ParagraphBidiInfo.new(text, nil)
       reordered = info.reorder_line(0...text.bytesize)
@@ -239,24 +239,24 @@ puts "Chat transcript:"
 chat_messages.each do |msg|
   user = msg[:user]
   text = msg[:text]
-  
+
   # Determine display direction
   direction = Bidi.get_base_direction(text)
-  
+
   # Format based on direction
   if direction.rtl?
     formatted = "【#{text}】 #{user}:"
   else
     formatted = "#{user}: #{text}"
   end
-  
+
   # Reorder if needed
   if direction.mixed?
     info = Bidi::ParagraphBidiInfo.new(text, nil)
     reordered = info.reorder_line(0...text.bytesize)
     formatted = "#{user}: #{reordered}"
   end
-  
+
   puts "  #{formatted}"
 end
 

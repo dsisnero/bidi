@@ -378,18 +378,18 @@ module Bidi
       # Create initial index map (visual index -> logical index)
       # Initially, visual order = logical order
       visual_to_logical = (0...levels.size).to_a
-      
+
       # Find min and max levels
       min_level = levels.min
       max_level = levels.max
-      
+
       # Apply L2: From highest level down to lowest odd level
       max_level_val = max_level.value.to_i
       min_rtl = min_level.new_lowest_ge_rtl
       # If there are no RTL levels, no reordering needed
       return visual_to_logical unless min_rtl.is_a?(Level)
       min_rtl_val = min_rtl.value.to_i
-      
+
       while max_level_val >= min_rtl_val
         # For each level, scan the entire array
         i = 0
@@ -399,13 +399,13 @@ module Bidi
             i += 1
             next
           end
-          
+
           # Found start of sequence at level >= current
           j = i + 1
           while j < visual_to_logical.size && levels[visual_to_logical[j]].value.to_i >= max_level_val
             j += 1
           end
-          
+
           # Reverse the sequence
           k = i
           l = j - 1
@@ -414,14 +414,14 @@ module Bidi
             k += 1
             l -= 1
           end
-          
+
           # Continue after this sequence
           i = j
         end
-        
+
         max_level_val -= 1
       end
-      
+
       visual_to_logical
     end
 
@@ -557,7 +557,7 @@ module Bidi
   end
 
   private def self.get_base_direction_impl(data_source : BidiDataSource, text : String, use_full_text : Bool) : Direction
-    return Direction::Ltr if text.empty?  # Empty text defaults to LTR
+    return Direction::Ltr if text.empty? # Empty text defaults to LTR
 
     isolate_level = 0
     text.each_char do |c|

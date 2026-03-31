@@ -355,9 +355,9 @@ module Bidi
               i = run.end - 1
               while i >= run.begin
                 if i > run.begin && text[i] >= 0xDC00 && text[i] <= 0xDFFF &&
-                   text[i-1] >= 0xD800 && text[i-1] <= 0xDBFF
+                   text[i - 1] >= 0xD800 && text[i - 1] <= 0xDBFF
                   # Surrogate pair: add high then low
-                  result << text[i-1]
+                  result << text[i - 1]
                   result << text[i]
                   i -= 2
                 else

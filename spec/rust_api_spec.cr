@@ -25,14 +25,14 @@ describe "Rust API Compatibility Tests" do
       # Original classes: L, L, L, EN, EN, EN
       expected_classes = [
         Bidi::BidiClass::L, Bidi::BidiClass::L, Bidi::BidiClass::L,
-        Bidi::BidiClass::EN, Bidi::BidiClass::EN, Bidi::BidiClass::EN
+        Bidi::BidiClass::EN, Bidi::BidiClass::EN, Bidi::BidiClass::EN,
       ]
       info.original_classes.should eq expected_classes
 
       # One paragraph
       info.paragraphs.size.should eq 1
       para = info.paragraphs[0]
-      para.range.should eq (0...6)
+      para.range.should eq(0...6)
       para.level.should eq Bidi::Level.ltr
     end
 
@@ -44,16 +44,16 @@ describe "Rust API Compatibility Tests" do
       # "abc " = level 0 (LTR in LTR paragraph)
       # "אבג" = level 1 (RTL in LTR paragraph gets embedding level +1)
       expected_levels = [
-        Bidi::Level.ltr, Bidi::Level.ltr, Bidi::Level.ltr, Bidi::Level.ltr,  # "abc "
-        Bidi::Level.new(1), Bidi::Level.new(1), Bidi::Level.new(1),  # First Hebrew char (2 bytes)
-        Bidi::Level.new(1), Bidi::Level.new(1), Bidi::Level.new(1),  # Second Hebrew char (2 bytes)
+        Bidi::Level.ltr, Bidi::Level.ltr, Bidi::Level.ltr, Bidi::Level.ltr, # "abc "
+        Bidi::Level.new(1), Bidi::Level.new(1), Bidi::Level.new(1),         # First Hebrew char (2 bytes)
+        Bidi::Level.new(1), Bidi::Level.new(1), Bidi::Level.new(1),         # Second Hebrew char (2 bytes)
         # Actually need to check exact byte count
       ]
 
       # We'll check the structure instead of exact bytes
       info.paragraphs.size.should eq 1
       para = info.paragraphs[0]
-      para.range.should eq (0...text.bytesize)
+      para.range.should eq(0...text.bytesize)
       para.level.should eq Bidi::Level.ltr
 
       # Should have mixed direction
@@ -75,7 +75,7 @@ describe "Rust API Compatibility Tests" do
 
     it "tests text with neutral characters only" do
       text = "123"
-      info = Bidi::BidiInfo.new(text, nil)  # Auto-detect paragraph level
+      info = Bidi::BidiInfo.new(text, nil) # Auto-detect paragraph level
 
       info.paragraphs.size.should eq 1
       para = info.paragraphs[0]
@@ -90,17 +90,17 @@ describe "Rust API Compatibility Tests" do
 
       info.paragraphs.size.should eq 1
       para = info.paragraphs[0]
-      para.level.rtl?.should be_true  # Starts with RTL character
+      para.level.rtl?.should be_true # Starts with RTL character
 
       line = para.range
       reordered = info.reorder_line(para, line)
 
-       # "אבגabc" in RTL paragraph:
-       # - "abc" (LTR) gets embedding level 2 (even = LTR)
-       # - "אבג" (RTL) stays level 1 (odd = RTL)
-       # Visual order: level 2 runs (LTR, not reversed), then level 1 runs (RTL, reversed)
-       # So: "abc" (not reversed) = "abc", then "אבג" reversed = "גבא"
-       reordered.should eq "abcגבא"
+      # "אבגabc" in RTL paragraph:
+      # - "abc" (LTR) gets embedding level 2 (even = LTR)
+      # - "אבג" (RTL) stays level 1 (odd = RTL)
+      # Visual order: level 2 runs (LTR, not reversed), then level 1 runs (RTL, reversed)
+      # So: "abc" (not reversed) = "abc", then "אבג" reversed = "גבא"
+      reordered.should eq "abcגבא"
     end
 
     it "tests reorder_line with LTR paragraph" do
@@ -133,7 +133,7 @@ describe "Rust API Compatibility Tests" do
       # First run should be LTR (level 0 or 2 depending on paragraph direction)
       # Second run should be RTL (level 1 or 3 depending on paragraph direction)
       runs[0].begin.should eq 0
-      runs[1].begin.should be >= runs[0].end  # Runs should not overlap, can be adjacent
+      runs[1].begin.should be >= runs[0].end # Runs should not overlap, can be adjacent
     end
 
     it "tests reordered_levels" do
@@ -172,9 +172,9 @@ describe "Rust API Compatibility Tests" do
     it "tests get_base_direction" do
       Bidi.get_base_direction("Hello").should eq Bidi::Direction::Ltr
       Bidi.get_base_direction("שלום").should eq Bidi::Direction::Rtl
-      Bidi.get_base_direction("123").should eq Bidi::Direction::Mixed  # Neutral
+      Bidi.get_base_direction("123").should eq Bidi::Direction::Mixed # Neutral
       Bidi.get_base_direction("Hello שלום").should eq Bidi::Direction::Ltr
-      Bidi.get_base_direction("").should eq Bidi::Direction::Ltr  # Empty defaults to LTR
+      Bidi.get_base_direction("").should eq Bidi::Direction::Ltr # Empty defaults to LTR
     end
 
     it "tests reorder_visual static method" do
@@ -207,11 +207,11 @@ describe "Rust API Compatibility Tests" do
       info = Bidi::ParagraphBidiInfo.new(text, nil)
 
       info.has_rtl?.should be_true
-      info.paragraph_level.rtl?.should be_false  # Starts with LTR
+      info.paragraph_level.rtl?.should be_false # Starts with LTR
 
       line = 0...text.bytesize
       reordered = info.reorder_line(line)
-      reordered.should eq "abcגבא"  # "abc" + "אבג" reversed
+      reordered.should eq "abcגבא" # "abc" + "אבג" reversed
     end
 
     pending "tests reordered_levels on ParagraphBidiInfo" do

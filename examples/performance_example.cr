@@ -52,21 +52,21 @@ paragraphs = test_text.split("\n")
 
 paragraphs.each_with_index do |para_text, i|
   next if para_text.empty?
-  
+
   puts "\nParagraph #{i + 1} (#{para_text.size} chars):"
-  
+
   # Time BidiInfo
   start_time = Time.instant
   info1 = Bidi::BidiInfo.new(para_text, nil)
   reordered1 = info1.reorder_line(info1.paragraphs[0], info1.paragraphs[0].range)
   time1 = Time.instant - start_time
-  
+
   # Time ParagraphBidiInfo
   start_time = Time.instant
   info2 = Bidi::ParagraphBidiInfo.new(para_text, nil)
   reordered2 = info2.reorder_line(0...para_text.bytesize)
   time2 = Time.instant - start_time
-  
+
   puts "  BidiInfo: #{time1.total_microseconds.round(2)} µs"
   puts "  ParagraphBidiInfo: #{time2.total_microseconds.round(2)} µs"
   puts "  Speedup: #{(time1.total_microseconds / time2.total_microseconds).round(2)}x"
