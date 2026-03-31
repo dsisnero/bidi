@@ -371,87 +371,58 @@ module Bidi
     end
 
     def self.reorder_visual(levels : Array(Level)) : Array(Int32)
-      # Implementation based on the visual_runs algorithm
-      # This should match Rust's reorder_visual behavior
+      # Implementation matching Rust's reorder_visual
+      # This applies only Rule L2 of the Unicode Bidi Algorithm
       return [] of Int32 if levels.empty?
 
-      # Find runs of consecutive positions with the same level
-      runs = [] of Range(Int32, Int32)
-      start = 0
-      current_level = levels[0]
-
-      (1...levels.size).each do |i|
-        if levels[i] != current_level
-          runs << (start...i)
-          start = i
-          current_level = levels[i]
-        end
-      end
-      runs << (start...levels.size)
-
-      # Create result array
-      result = (0...levels.size).to_a
-
+      # Create initial index map (visual index -> logical index)
+      # Initially, visual order = logical order
+      visual_to_logical = (0...levels.size).to_a
+      
       # Find min and max levels
       min_level = levels.min
       max_level = levels.max
-
-      # If all levels are LTR, no reordering needed
-      if min_level == max_level && min_level.ltr?
-        return result
-      end
-
-      # Apply L2 algorithm
-      max_level_val = max_level.value
+      
+      # Apply L2: From highest level down to lowest odd level
+      max_level_val = max_level.value.to_i
       min_rtl = min_level.new_lowest_ge_rtl
-      min_rtl_val = min_rtl.is_a?(Level) ? min_rtl.value : 0
-
+      # If there are no RTL levels, no reordering needed
+      return visual_to_logical unless min_rtl.is_a?(Level)
+      min_rtl_val = min_rtl.value.to_i
+      
       while max_level_val >= min_rtl_val
-        # Find sequences of runs at this level or higher and reverse them
-        seq_start = 0
-        while seq_start < runs.size
-          # Check if this run is at current level
-          run = runs[seq_start]
-          level_at_start = levels[run.begin]
-          if level_at_start.value != max_level_val
-            seq_start += 1
+        # For each level, scan the entire array
+        i = 0
+        while i < visual_to_logical.size
+          # Skip elements below current level
+          if levels[visual_to_logical[i]].value.to_i < max_level_val
+            i += 1
             next
           end
-
-          # Find end of sequence (runs at same level)
-          seq_end = seq_start + 1
-          while seq_end < runs.size
-            run_next = runs[seq_end]
-            level_at_next = levels[run_next.begin]
-            break if level_at_next.value != max_level_val
-            seq_end += 1
+          
+          # Found start of sequence at level >= current
+          j = i + 1
+          while j < visual_to_logical.size && levels[visual_to_logical[j]].value.to_i >= max_level_val
+            j += 1
           end
-
-          # Reverse this sequence in the result
-          # Collect all indices in this sequence
-          seq_indices = [] of Int32
-          (seq_start...seq_end).each do |run_idx|
-            run_range = runs[run_idx]
-            seq_indices.concat(result[run_range])
+          
+          # Reverse the sequence
+          k = i
+          l = j - 1
+          while k < l
+            visual_to_logical[k], visual_to_logical[l] = visual_to_logical[l], visual_to_logical[k]
+            k += 1
+            l -= 1
           end
-
-          # Reverse and put back
-          seq_indices.reverse!
-          idx = 0
-          (seq_start...seq_end).each do |run_idx|
-            run_range = runs[run_idx]
-            size = run_range.end - run_range.begin
-            result[run_range] = seq_indices[idx, size]
-            idx += size
-          end
-
-          seq_start = seq_end
+          
+          # Continue after this sequence
+          i = j
         end
-
+        
         max_level_val -= 1
       end
-
-      result
+      
+      visual_to_logical
     end
 
     # Reorders a line of text for visual display
@@ -533,7 +504,14 @@ module Bidi
             seq_end += 1
           end
 
-          runs[seq_start...seq_end].reverse!
+          # Reverse runs in place
+          i = seq_start
+          j = seq_end - 1
+          while i < j
+            runs[i], runs[j] = runs[j], runs[i]
+            i += 1
+            j -= 1
+          end
           seq_start = seq_end
         end
 
@@ -547,14 +525,15 @@ module Bidi
     private def do_reorder_line(text : String, line : Range(Int32, Int32), levels : Array(Level), runs : Array(Range(Int32, Int32))) : String
       parts = [] of String
       runs.each do |run|
+        slice = text.byte_slice(run.begin, run.end - run.begin)
         if l = levels[run.begin]?
           if l.rtl?
-            parts << text[run].chars.reverse!.join
+            parts << slice.chars.reverse!.join
           else
-            parts << text[run]
+            parts << slice
           end
         else
-          parts << text[run]
+          parts << slice
         end
       end
       parts.join

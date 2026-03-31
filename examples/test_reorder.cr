@@ -8,9 +8,9 @@ bidi_info = Bidi::BidiInfo.new(text, nil)
 para = bidi_info.paragraphs[0]
 line = para.range
 display = bidi_info.reorder_line(para, line)
-puts "  Expected: \"cbaגבא\" (abc reversed + אבג reversed)"
+puts "  Expected: \"abcגבא\" (abc not reversed + אבג reversed)"
 puts "  Got: #{display.inspect}"
-puts "  Correct? #{display == "cbaגבא"}"
+puts "  Correct? #{display == "abcגבא"}"
 
 # Test with explicit paragraph level
 puts "\nTest 2: #{text.inspect} with LTR paragraph level"

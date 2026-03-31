@@ -95,12 +95,12 @@ describe "Rust API Compatibility Tests" do
       line = para.range
       reordered = info.reorder_line(para, line)
 
-      # "אבגabc" in RTL paragraph:
-      # - "abc" (LTR) gets embedding level 2
-      # - "אבג" (RTL) stays level 1
-      # Visual order: level 2 runs reversed, then level 1 runs reversed
-      # So: "abc" reversed = "cba", then "אבג" reversed = "גבא"
-      reordered.should eq "cbaגבא"
+       # "אבגabc" in RTL paragraph:
+       # - "abc" (LTR) gets embedding level 2 (even = LTR)
+       # - "אבג" (RTL) stays level 1 (odd = RTL)
+       # Visual order: level 2 runs (LTR, not reversed), then level 1 runs (RTL, reversed)
+       # So: "abc" (not reversed) = "abc", then "אבג" reversed = "גבא"
+       reordered.should eq "abcגבא"
     end
 
     it "tests reorder_line with LTR paragraph" do
@@ -193,13 +193,10 @@ describe "Rust API Compatibility Tests" do
       # L1: Reset trailing whitespace (not implemented in reorder_visual)
       # L2: Reorder
       # Levels: 0 0 0 1 1 2 2 2
-      # Max level = 2
-      # For level 2: indices 5,6,7 -> reversed to 7,6,5
-      # For level 1: indices 3,4 -> reversed to 4,3
-      # For level 0: indices 0,1,2 -> stay
-      # Result: 0,1,2,4,3,7,6,5
+      # Based on algorithm and matching Rust's behavior for similar case:
+      # Result should be [0, 1, 2, 5, 6, 7, 4, 3]
       result = Bidi::BidiInfo.reorder_visual(levels)
-      expected = [0, 1, 2, 4, 3, 7, 6, 5]
+      expected = [0, 1, 2, 5, 6, 7, 4, 3]
       result.should eq expected
     end
   end
