@@ -1,0 +1,4 @@
+[submodule "vendor/unicode-bidi"]
+	path = vendor/unicode-bidi
+	url = https://github.com/servo/unicode-bidi.git
+	branch = main
