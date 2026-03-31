@@ -1,0 +1,42 @@
+# source_test_id	status	crystal_refs	notes
+src/char_data/mod.rs::test::test_ascii	missing	-	baseline
+src/char_data/mod.rs::test::test_bmp	missing	-	baseline
+src/char_data/mod.rs::test::test_smp	missing	-	baseline
+src/char_data/mod.rs::test::test_unassigned_planes	missing	-	baseline
+src/level.rs::test::test_has_rtl	ported	spec/level_spec.cr:77	test_has_rtl ported
+src/level.rs::test::test_into	missing	-	baseline
+src/level.rs::test::test_is_ltr	ported	spec/level_spec.cr:22	test_is_ltr ported
+src/level.rs::test::test_is_rtl	ported	spec/level_spec.cr:33	test_is_rtl ported
+src/level.rs::test::test_lower	ported	spec/level_spec.cr:66	test_lower ported
+src/level.rs::test::test_new	ported	spec/level_spec.cr:5	test_new ported
+src/level.rs::test::test_new_explicit	ported	spec/level_spec.cr:13	test_new_explicit ported
+src/level.rs::test::test_raise	ported	spec/level_spec.cr:44	test_raise ported
+src/level.rs::test::test_raise_explicit	ported	spec/level_spec.cr:55	test_raise_explicit ported
+src/level.rs::test::test_statics	missing	-	baseline
+src/level.rs::test::test_str_eq	missing	-	baseline
+src/level.rs::test::test_string_eq	missing	-	baseline
+src/level.rs::test::test_vec	ported	spec/level_spec.cr:88	test_vec ported
+src/lib.rs::test::test_bidi_info_has_rtl	missing	-	baseline
+src/lib.rs::test::test_direction	missing	-	baseline
+src/lib.rs::test::test_edge_cases_direction	missing	-	baseline
+src/lib.rs::test::test_get_base_direction	ported	spec/info_spec.cr:38	get_base_direction tests ported (with simplified character data)
+src/lib.rs::test::test_get_base_direction_full	ported	spec/info_spec.cr:68	get_base_direction_full tests ported (with simplified character data)
+src/lib.rs::test::test_initial_text_info	missing	-	baseline
+src/lib.rs::test::test_level_at	missing	-	baseline
+src/lib.rs::test::test_levels	missing	-	baseline
+src/lib.rs::test::test_paragraph_bidi_info	missing	-	baseline
+src/lib.rs::test::test_paragraph_info_len	missing	-	baseline
+src/lib.rs::test::test_process_text	missing	-	baseline
+src/lib.rs::test::test_reorder_line	missing	-	baseline
+src/lib.rs::test::test_reordered_levels	missing	-	baseline
+src/lib.rs::test::test_reordered_levels_range	missing	-	baseline
+src/lib.rs::test::test_utf16_char_iter	missing	-	baseline
+src/lib.rs::test::test_utf16_text_source	missing	-	baseline
+src/prepare.rs::test::test_isolating_run_sequences	ported	spec/prepare_spec.cr:35	test_isolating_run_sequences ported (examples 1-2)
+src/prepare.rs::test::test_isolating_run_sequences_sos_and_eos	missing	-	baseline
+src/prepare.rs::test::test_level_runs	ported	spec/prepare_spec.cr:9	test_level_runs ported
+src/prepare.rs::test::test_not_removed_by_x9	ported	spec/prepare_spec.cr:27	test_not_removed_by_x9 ported
+src/prepare.rs::test::test_removed_by_x9	ported	spec/prepare_spec.cr:17	test_removed_by_x9 ported
+tests/conformance_tests.rs::test::test_basic_conformance	missing	-	baseline
+tests/conformance_tests.rs::test::test_character_conformance	missing	-	baseline
+tests/conformance_tests.rs::test::test_gen_char_from_bidi_class	missing	-	baseline

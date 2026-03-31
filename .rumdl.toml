@@ -1,0 +1,19 @@
+# Rumdl configuration for bidi Crystal port
+
+[global]
+exclude = ["temp", "vendor"]
+
+[project]
+name = "bidi"
+version = "0.1.0"
+description = "Crystal port of Unicode Bidirectional Algorithm implementation"
+license = "MIT"
+authors = ["Dominic Sisneros <dsisnero@gmail.com>"]
+
+[build]
+crystal = ">= 1.19.1"
+
+[dependencies]
+
+[dev-dependencies]
+ameba = { github = "crystal-ameba/ameba", version = "~> 1.0" }

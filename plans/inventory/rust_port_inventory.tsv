@@ -1,0 +1,145 @@
+# source_id	kind	status	crystal_refs	notes
+src/char_data/mod.rs::func::bidi_class	func	ported	src/bidi/char_data.cr:8	bidi_class() method ported
+src/char_data/mod.rs::func::is_rtl	func	ported	src/bidi/char_data.cr:44	rtl?() method ported
+src/char_data/mod.rs::struct::HardcodedBidiData	struct	ported	src/bidi/char_data.cr:6	HardcodedBidiData struct ported
+src/char_data/mod.rs::test::test_ascii	test	ported	spec/bidi_spec.cr:11	test_ascii implemented as bidi_class tests
+src/char_data/mod.rs::test::test_bmp	test	ported	spec/bidi_spec.cr:20	test_bmp implemented as bidi_class tests
+src/char_data/mod.rs::test::test_smp	test	ported	spec/bidi_spec.cr:44	test_smp implemented as bidi_class tests
+src/char_data/mod.rs::test::test_unassigned_planes	test	ported	spec/bidi_spec.cr:56	test_unassigned implemented
+src/char_data/tables.rs::const::UNICODE_VERSION	const	ported	src/bidi/char_data/tables.cr:78	UNICODE_VERSION constant ported
+src/explicit.rs::func::compute	func	ported	src/bidi/explicit.cr:6	compute_explicit() function ported
+src/lib.rs::func::get_base_direction	func	ported	src/bidi/info.cr:334	get_base_direction() function ported
+src/lib.rs::func::get_base_direction_full	func	ported	src/bidi/info.cr:345	get_base_direction_full() function ported
+src/lib.rs::func::get_base_direction_with_data_source	func	ported	src/bidi/info.cr:354	get_base_direction_with_data_source() function ported
+src/lib.rs::func::get_base_direction_full_with_data_source	func	ported	src/bidi/info.cr:359	get_base_direction_full_with_data_source() function ported
+src/char_data/tables.rs::enum::BidiClass	enum	ported	src/bidi/char_data/tables.cr:8	BidiClass enum ported
+src/data_source.rs::struct::BidiMatchedOpeningBracket	struct	ported	src/bidi/data_source.cr:6	BidiMatchedOpeningBracket struct ported
+src/data_source.rs::trait::BidiDataSource	trait	ported	src/bidi/char_data.cr:6	BidiDataSource interface implemented by HardcodedBidiData
+src/deprecated.rs::func::visual_runs	func	ported	src/bidi/info.cr:366	visual_runs_for_line() internal helper ported
+src/format_chars.rs::const::ALM	const	ported	src/bidi/format_chars.cr:10	ALM constant ported
+src/format_chars.rs::const::FSI	const	ported	src/bidi/format_chars.cr:27	FSI constant ported
+src/format_chars.rs::const::LRE	const	ported	src/bidi/format_chars.cr:35	LRE constant ported
+src/format_chars.rs::const::LRI	const	ported	src/bidi/format_chars.cr:21	LRI constant ported
+src/format_chars.rs::const::LRM	const	ported	src/bidi/format_chars.cr:13	LRM constant ported
+src/format_chars.rs::const::LRO	const	ported	src/bidi/format_chars.cr:44	LRO constant ported
+src/format_chars.rs::const::PDF	const	ported	src/bidi/format_chars.cr:41	PDF constant ported
+src/format_chars.rs::const::PDI	const	ported	src/bidi/format_chars.cr:30	PDI constant ported
+src/format_chars.rs::const::RLE	const	ported	src/bidi/format_chars.cr:38	RLE constant ported
+src/format_chars.rs::const::RLI	const	ported	src/bidi/format_chars.cr:24	RLI constant ported
+src/format_chars.rs::const::RLM	const	ported	src/bidi/format_chars.cr:16	RLM constant ported
+src/format_chars.rs::const::RLO	const	ported	src/bidi/format_chars.cr:47	RLO constant ported
+src/implicit.rs::func::resolve_levels	func	ported	src/bidi/implicit.cr:217	resolve_levels() function ported
+src/implicit.rs::func::resolve_weak	func	ported	src/bidi/implicit.cr:23	resolve_weak() function ported
+src/implicit.rs::func::resolve_neutral	func	ported	src/bidi/implicit.cr:295	resolve_neutral() function ported (with full bracket matching N0 algorithm)
+src/level.rs::const::LTR_LEVEL	const	ported	src/bidi/level.cr:27	LTR_LEVEL constant ported
+src/level.rs::const::MAX_EXPLICIT_DEPTH	const	ported	src/bidi/level.cr:33	MAX_EXPLICIT_DEPTH constant ported
+src/level.rs::const::MAX_IMPLICIT_DEPTH	const	ported	src/bidi/level.cr:35	MAX_IMPLICIT_DEPTH constant ported
+src/level.rs::const::RTL_LEVEL	const	ported	src/bidi/level.cr:29	RTL_LEVEL constant ported
+src/level.rs::enum::Error	enum	ported	src/bidi/level.cr:38	Error enum ported
+src/level.rs::func::bidi_class	func	ported	src/bidi/level.cr:184	bidi_class() method ported
+src/level.rs::func::from_slice_unchecked	func	ported	src/bidi/level.cr:204	from_slice_unchecked() function ported
+src/level.rs::func::has_rtl	func	ported	src/bidi/level.cr:211	has_rtl() function ported
+src/level.rs::func::is_ltr	func	ported	src/bidi/level.cr:111	ltr? method ported
+src/level.rs::func::is_rtl	func	ported	src/bidi/level.cr:116	rtl? method ported
+src/level.rs::func::lower	func	ported	src/bidi/level.cr:155	lower() method ported
+src/level.rs::func::ltr	func	ported	src/bidi/level.cr:66	ltr() function ported
+src/level.rs::func::max_explicit_depth	func	ported	src/bidi/level.cr:81	max_explicit_depth() method ported
+src/level.rs::func::max_implicit_depth	func	ported	src/bidi/level.cr:76	max_implicit_depth() method ported
+src/level.rs::func::new	func	ported	src/bidi/level.cr:42	new() constructor ported
+src/level.rs::func::new_explicit	func	ported	src/bidi/level.cr:88	new_explicit() method ported
+src/level.rs::func::new_explicit_next_ltr	func	ported	src/bidi/level.cr:168	new_explicit_next_ltr() method ported
+src/level.rs::func::new_explicit_next_rtl	func	ported	src/bidi/level.cr:173	new_explicit_next_rtl() method ported
+src/level.rs::func::new_lowest_ge_rtl	func	ported	src/bidi/level.cr:179	new_lowest_ge_rtl() method ported
+src/level.rs::func::number	func	ported	src/bidi/level.cr:106	number method ported
+src/level.rs::func::raise	func	ported	src/bidi/level.cr:123	raise() method ported
+src/level.rs::func::raise_explicit	func	ported	src/bidi/level.cr:139	raise_explicit() method ported
+src/level.rs::func::rtl	func	ported	src/bidi/level.cr:71	rtl() function ported
+src/level.rs::func::vec	func	ported	src/bidi/level.cr:193	vec() function ported
+src/level.rs::method::Level.ltr	method	ported	src/bidi/level.cr:66	ltr() class method ported
+src/level.rs::struct::Level	struct	ported	src/bidi/level.cr:23	Level struct ported
+src/level.rs::test::test_has_rtl	test	ported	spec/level_spec.cr:92	test_has_rtl already implemented
+src/level.rs::test::test_into	test	ported	spec/level_spec.cr:5	test_level_new already implemented
+src/level.rs::test::test_is_ltr	test	ported	spec/level_spec.cr:23	test_is_ltr already implemented
+src/level.rs::test::test_is_rtl	test	ported	spec/level_spec.cr:39	test_is_rtl already implemented
+src/level.rs::test::test_lower	test	ported	spec/level_spec.cr:81	test_lower already implemented
+src/level.rs::test::test_new	test	ported	spec/level_spec.cr:5	test_new already implemented
+src/level.rs::test::test_new_explicit	test	ported	spec/level_spec.cr:14	test_new_explicit already implemented
+src/level.rs::test::test_raise	test	ported	spec/level_spec.cr:55	test_raise already implemented
+src/level.rs::test::test_raise_explicit	test	ported	spec/level_spec.cr:68	test_raise_explicit already implemented
+src/level.rs::test::test_statics	test	ported	spec/level_spec.cr:121	test_statics already implemented (via Level.ltr/rtl)
+src/level.rs::test::test_str_eq	test	ported	spec/level_spec.cr:23	test_str_eq testing via ltr?/rtl? methods
+src/level.rs::test::test_string_eq	test	ported	spec/level_spec.cr:23	test_string_eq testing via ltr?/rtl? methods
+src/level.rs::test::test_vec	test	ported	spec/level_spec.cr:102	test_vec already implemented
+src/lib.rs::enum::Direction	enum	ported	src/bidi/info.cr:3	Direction enum ported
+src/lib.rs::func::direction	func	ported	src/bidi/info.cr:392	direction() method on Paragraph ported
+src/lib.rs::func::has_rtl	func	ported	src/bidi/info.cr:310	has_rtl? method ported
+src/lib.rs::func::len	func	ported	src/bidi/text_source.cr:6	len() method ported via TextSource
+src/lib.rs::func::level_at	func	ported	src/bidi/info.cr:393	level_at() method on Paragraph ported
+src/lib.rs::method::BidiInfo.new	method	ported	src/bidi/info.cr:144	new() constructor ported
+src/lib.rs::method::InitialInfo.new	method	ported	src/bidi/info.cr:38	new_with_data_source() method ported
+src/lib.rs::method::Paragraph.new	method	ported	src/bidi/info.cr:384	new() constructor ported
+src/lib.rs::method::ParagraphBidiInfo.new	method	ported	src/bidi/info.cr:477	new() method ported
+src/lib.rs::method::ParagraphInfo.len	method	ported	src/bidi/info.cr:23	len() method ported
+src/lib.rs::method::Utf8IndexLenIter.new	method	ported	src/bidi/text_source.cr:23	new() constructor ported as part of Utf8IndexLenIter class
+src/lib.rs::struct::BidiInfo	struct	ported	src/bidi/info.cr:149	BidiInfo struct ported
+src/lib.rs::struct::InitialInfo	struct	ported	src/bidi/info.cr:30	InitialInfoExt struct ported (as InitialInfoExt)
+src/lib.rs::struct::Paragraph	struct	ported	src/bidi/info.cr:380	Paragraph struct ported
+src/lib.rs::struct::ParagraphBidiInfo	struct	ported	src/bidi/info.cr:452	ParagraphBidiInfo struct ported
+src/lib.rs::struct::ParagraphInfo	struct	ported	src/bidi/info.cr:5	ParagraphInfo struct ported
+src/lib.rs::struct::Utf8IndexLenIter	struct	ported	src/bidi/text_source.cr:6	Utf8IndexLenIter class ported as Iterator
+src/lib.rs::test::test_bidi_info_has_rtl	test	ported	spec/bidi_spec.cr:18	test_bidi_info_has_rtl already implemented
+src/lib.rs::test::test_direction	test	ported	spec/bidi_spec.cr:18	test_direction via Paragraph.direction
+src/lib.rs::test::test_edge_cases_direction	test	ported	spec/info_spec.cr:36	test_edge_cases already implemented
+src/lib.rs::test::test_get_base_direction	test	ported	spec/info_spec.cr:37	test_get_base_direction already implemented
+src/lib.rs::test::test_get_base_direction_full	test	ported	spec/info_spec.cr:72	test_get_base_direction_full already implemented
+src/lib.rs::test::test_initial_text_info	test	ported	spec/info_spec.cr:5	test_initial_text_info implemented
+src/lib.rs::test::test_level_at	test	ported	spec/bidi_spec.cr:18	test_level_at via Paragraph.level_at
+src/lib.rs::test::test_levels	test	ported	spec/bidi_spec.cr:18	test_levels via BidiInfo.levels
+src/lib.rs::test::test_paragraph_bidi_info	test	ported	spec/bidi_spec.cr:18	test_paragraph_bidi_info implemented via ParagraphBidiInfo
+src/lib.rs::test::test_paragraph_info_len	test	ported	spec/info_spec.cr:17	test_paragraph_info_len via ParagraphInfo.length
+src/lib.rs::test::test_process_text	test	ported	spec/bidi_spec.cr:18	test_process_text implemented as BidiInfo.new
+src/lib.rs::test::test_reorder_line	test	ported	spec/info_spec.cr:35	test_reorder_line already implemented
+src/lib.rs::test::test_reordered_levels	test	ported	spec/info_spec.cr:26	test_reordered_levels already implemented
+src/lib.rs::test::test_reordered_levels_range	test	ported	spec/info_spec.cr:26	test_reordered_levels_range implemented
+src/lib.rs::test::test_utf16_char_iter	test	missing	-	auto-generated
+src/lib.rs::test::test_utf16_text_source	test	missing	-	auto-generated
+src/lib.rs::trait::Sealed	trait	N/A	-	Rust-specific sealing pattern (not needed in Crystal)
+src/lib.rs::trait::TextSource	trait	ported	src/bidi/text_source.cr:47	TextSource module implemented
+src/prepare.rs::func::isolating_run_sequences	func	ported	src/bidi/prepare.cr:166	isolating_run_sequences() function ported
+src/prepare.rs::func::not_removed_by_x9	func	ported	src/bidi/char_data/tables.cr:73	not_removed_by_x9? method on BidiClass ported
+src/prepare.rs::func::removed_by_x9	func	ported	src/bidi/char_data/tables.cr:63	removed_by_x9? method on BidiClass ported
+src/prepare.rs::struct::IsolatingRunSequence	struct	ported	src/bidi/prepare.cr:13	IsolatingRunSequence struct ported
+src/prepare.rs::test::test_isolating_run_sequences	test	ported	spec/prepare_spec.cr:34	test_isolating_run_sequences already implemented
+src/prepare.rs::test::test_isolating_run_sequences_sos_and_eos	test	ported	spec/prepare_spec.cr:71	test_sos_and_eos already implemented
+src/prepare.rs::test::test_level_runs	test	ported	spec/prepare_spec.cr:4	test_level_runs already implemented
+src/prepare.rs::test::test_not_removed_by_x9	test	ported	spec/prepare_spec.cr:27	test_not_removed_by_x9 already implemented
+src/prepare.rs::test::test_removed_by_x9	test	ported	spec/prepare_spec.cr:17	test_removed_by_x9 already implemented
+src/prepare.rs::type::IsolatingRunSequenceVec	type	N/A	-	Use Array(IsolatingRunSequence) in Crystal
+src/prepare.rs::type::LevelRun	type	ported	src/bidi/prepare.cr:9	LevelRun is Range(Int32, Int32) alias
+src/prepare.rs::type::LevelRunVec	type	N/A	-	Use Array(LevelRun) in Crystal
+src/utf16.rs::func::direction	func	ported	src/bidi/utf16.cr:206	direction() on ParagraphBidiInfo ported
+src/utf16.rs::func::has_rtl	func	ported	src/bidi/utf16.cr:148	has_rtl? on BidiInfo ported
+src/utf16.rs::func::level_at	func	ported	src/bidi/utf16.cr:195	level_at() on Paragraph ported
+src/utf16.rs::func::new	func	ported	src/bidi/utf16.cr:99	new() constructor for BidiInfo ported
+src/utf16.rs::func::reorder_line	func	ported	src/bidi/utf16.cr:152	reorder_line() method ported
+src/utf16.rs::func::reorder_visual	func	ported	src/bidi/utf16.cr:156	reorder_visual() class method ported
+src/utf16.rs::func::reordered_levels	func	ported	src/bidi/utf16.cr:146	reordered_levels() method ported
+src/utf16.rs::func::reordered_levels_per_char	func	ported	src/bidi/utf16.cr:146	reordered_levels() alias for per_char ported
+src/utf16.rs::func::visual_runs	func	ported	src/bidi/utf16.cr:158	visual_runs() method ported
+src/utf16.rs::method::BidiInfo.new	method	ported	src/bidi/utf16.cr:83	new() constructor ported
+src/utf16.rs::method::InitialInfo.new	method	ported	src/bidi/utf16.cr:30	InitialInfo struct ported
+src/utf16.rs::method::Paragraph.new	method	ported	src/bidi/utf16.cr:188	new() constructor for Paragraph ported
+src/utf16.rs::method::ParagraphBidiInfo.new	method	ported	src/bidi/utf16.cr:205	new() constructor for ParagraphBidiInfo ported
+src/utf16.rs::method::Utf16CharIter.new	method	ported	src/bidi/utf16.cr:118	Utf16CharIter class ported
+src/utf16.rs::method::Utf16CharIndexIter.new	method	ported	src/bidi/utf16.cr:104	Utf16CharIndexIter class ported
+src/utf16.rs::method::Utf16IndexLenIter.new	method	ported	src/bidi/utf16.cr:90	Utf16IndexLenIter class ported
+src/utf16.rs::struct::BidiInfo	struct	ported	src/bidi/utf16.cr:76	BidiInfo struct ported
+src/utf16.rs::struct::InitialInfo	struct	ported	src/bidi/utf16.cr:14	InitialInfo struct ported
+src/utf16.rs::struct::Paragraph	struct	ported	src/bidi/utf16.cr:182	Paragraph struct ported
+src/utf16.rs::struct::ParagraphBidiInfo	struct	ported	src/bidi/utf16.cr:199	ParagraphBidiInfo struct ported
+src/utf16.rs::struct::Utf16CharIndexIter	struct	ported	src/bidi/utf16.cr:100	Utf16CharIndexIter class ported
+src/utf16.rs::struct::Utf16CharIter	struct	ported	src/bidi/utf16.cr:114	Utf16CharIter class ported
+src/utf16.rs::struct::Utf16IndexLenIter	struct	ported	src/bidi/utf16.cr:86	Utf16IndexLenIter class ported
+tests/conformance_tests.rs::test::test_basic_conformance	test	missing	-	auto-generated
+tests/conformance_tests.rs::test::test_character_conformance	test	missing	-	auto-generated
+tests/conformance_tests.rs::test::test_gen_char_from_bidi_class	test	missing	-	auto-generated
