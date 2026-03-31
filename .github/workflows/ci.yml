@@ -14,9 +14,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Crystal
-        uses: crystal-lang/install-crystal@v2
+        uses: crystal-lang/install-crystal@v1
         with:
-          crystal-version: 'latest'
+          crystal: 'latest'
 
       - name: Install dependencies
         run: |
@@ -39,9 +39,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Crystal
-        uses: crystal-lang/install-crystal@v2
+        uses: crystal-lang/install-crystal@v1
         with:
-          crystal-version: 'latest'
+          crystal: 'latest'
 
       - name: Install dependencies
         run: shards install
