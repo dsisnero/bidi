@@ -1,12 +1,39 @@
 # Main public API for the Unicode Bidirectional Algorithm
+#
+# This module implements the Unicode Bidirectional Algorithm (UBA) as defined in
+# Unicode Technical Report #9 (https://www.unicode.org/reports/tr9/).
+#
+# It is a behavior-identical port of the Rust `unicode-bidi` crate v0.3.18,
+# providing UTF-8 text analysis and reordering for mixed RTL/LTR text display.
+#
+# Key components:
+# - `BidiInfo`: Multi-paragraph analysis for UTF-8 text
+# - `ParagraphBidiInfo`: Single-paragraph analysis for UTF-8 text
+# - `Direction`: Paragraph direction (Ltr, Rtl, Mixed)
+# - `ParagraphInfo`: Information about a single paragraph within text
+#
+# All public APIs match the Rust crate exactly, including method signatures,
+# return types, and edge case behavior.
+
+require "./bidi_info_common"
 
 module Bidi
+  # Paragraph directionality
+  #
+  # Represents the overall direction of a paragraph after bidi analysis:
+  # - `Ltr`: Entirely left-to-right text
+  # - `Rtl`: Entirely right-to-left text
+  # - `Mixed`: Mixed-direction text containing both LTR and RTL content
   enum Direction
     Ltr
     Rtl
     Mixed
   end
 
+  # Information about a single paragraph within text
+  #
+  # Contains the byte range and base embedding level for a paragraph.
+  # Used with `BidiInfo` for paragraph-level operations.
   struct ParagraphInfo
     property range : Range(Int32, Int32)
     property level : Level
@@ -14,8 +41,67 @@ module Bidi
     def initialize(@range : Range(Int32, Int32), @level : Level)
     end
 
+    # Returns the length of the paragraph in bytes
     def length : Int32
       @range.end - @range.begin
+    end
+  end
+
+  # Combined reference to `BidiInfo` and a specific paragraph within it
+  #
+  # Provides convenient access to paragraph-level operations without
+  # needing to pass both `BidiInfo` and `ParagraphInfo` separately.
+  # This matches the Rust `Paragraph<'a, 'text>` struct.
+  struct Paragraph
+    property info : BidiInfo
+    property para : ParagraphInfo
+
+    def initialize(@info : BidiInfo, @para : ParagraphInfo)
+    end
+
+    # Returns the overall direction of the paragraph (Ltr, Rtl, or Mixed)
+    #
+    # Determined by examining the levels of all characters in the paragraph:
+    # - All LTR levels → Ltr
+    # - All RTL levels → Rtl
+    # - Mixed LTR/RTL levels → Mixed
+    def direction : Direction
+      para_direction(@info.levels[@para.range])
+    end
+
+    # Returns the embedding level at a specific character position
+    #
+    # Parameters:
+    # - `pos`: Character position within the paragraph (0-based, in characters)
+    #
+    # Returns: The `Level` at that position
+    def level_at(pos : Int32) : Level
+      @info.levels[@para.range.begin + pos]
+    end
+
+    private def para_direction(levels : Array(Level)) : Direction
+      ltr = false
+      rtl = false
+      levels.each do |level|
+        if level.ltr?
+          ltr = true
+          return Direction::Mixed if rtl
+        end
+
+        if level.rtl?
+          rtl = true
+          return Direction::Mixed if ltr
+        end
+      end
+
+      if ltr
+        Direction::Ltr
+      elsif rtl
+        Direction::Rtl
+      else
+        # Empty paragraph or all neutral characters
+        Direction::Ltr
+      end
     end
   end
 
@@ -103,7 +189,21 @@ module Bidi
     end
   end
 
+  # Main structure for bidirectional analysis of UTF-8 text
+  #
+  # Contains the results of bidi analysis for potentially multiple paragraphs.
+  # This is the primary entry point for analyzing mixed-direction text.
+  #
+  # Properties:
+  # - `text`: The original input text
+  # - `original_classes`: BidiClass for each byte in the text
+  # - `levels`: Embedding level for each byte in the text (after resolution)
+  # - `paragraphs`: Information about each paragraph in the text
+  #
+  # This matches the Rust `BidiInfo<'text>` struct.
   struct BidiInfo
+    include BidiInfoCommon
+
     property text : String
     property original_classes : Array(BidiClass)
     property levels : Array(Level)
@@ -112,10 +212,28 @@ module Bidi
     def initialize(@text : String, @original_classes : Array(BidiClass), @levels : Array(Level), @paragraphs : Array(ParagraphInfo))
     end
 
+    # Creates a new `BidiInfo` by analyzing text with the default data source
+    #
+    # Parameters:
+    # - `text`: The UTF-8 text to analyze
+    # - `default_para_level`: Optional base paragraph level (nil for auto-detection)
+    #
+    # Returns: `BidiInfo` with analysis results
     def self.new(text : String, default_para_level : Level? = nil) : BidiInfo
       new_with_data_source(HardcodedBidiData.new, text, default_para_level)
     end
 
+    # Creates a new `BidiInfo` with a custom data source for bidi data
+    #
+    # This is the lower-level constructor that allows customizing the
+    # Unicode data source. Most users should use `BidiInfo.new()` instead.
+    #
+    # Parameters:
+    # - `data_source`: Custom `BidiDataSource` for bidi class lookups
+    # - `text`: The UTF-8 text to analyze
+    # - `default_para_level`: Optional base paragraph level
+    #
+    # Returns: `BidiInfo` with analysis results
     def self.new_with_data_source(data_source : BidiDataSource, text : String, default_para_level : Level? = nil) : BidiInfo
       initial_info = InitialInfoExt.new_with_data_source(data_source, text, default_para_level)
 
@@ -139,7 +257,7 @@ module Bidi
         return
       end
 
-      para_text = text[para.range]
+      para_text = text.byte_slice(para.range.begin, para.range.end - para.range.begin)
       level_runs = [] of LevelRun
 
       Bidi.compute_explicit(para_text, para.level, original_classes, levels, processing_classes, level_runs, para.range.begin, para.range.end - para.range.begin)
@@ -232,78 +350,141 @@ module Bidi
     end
 
     def reordered_levels_per_char(para : ParagraphInfo, line : Range(Int32, Int32)) : Array(Level)
+      # line is a byte range, but we need to return levels per character
       levels = reordered_levels(para, line)
       result = [] of Level
-      text[line].each_char do |_c|
-        idx = text[0...line.begin].bytesize + result.size
-        result << (levels[idx]? || para.level)
+
+      # Iterate over characters in the byte range
+      byte_pos = line.begin
+      while byte_pos < line.end && byte_pos < @text.bytesize
+        char = @text.char_at(byte_pos)
+        break unless char
+        char_len = char.bytesize
+
+        # Add the level for this character (use the level of the first byte)
+        result << (levels[byte_pos]? || para.level)
+
+        byte_pos += char_len
       end
+
       result
     end
 
-    def has_rtl? : Bool
-      @levels.any?(&.rtl?)
-    end
-
-    def has_ltr? : Bool
-      @levels.any?(&.ltr?)
-    end
-
     def self.reorder_visual(levels : Array(Level)) : Array(Int32)
+      # Implementation based on the visual_runs algorithm
+      # This should match Rust's reorder_visual behavior
       return [] of Int32 if levels.empty?
 
+      # Find runs of consecutive positions with the same level
+      runs = [] of Range(Int32, Int32)
+      start = 0
+      current_level = levels[0]
+
+      (1...levels.size).each do |i|
+        if levels[i] != current_level
+          runs << (start...i)
+          start = i
+          current_level = levels[i]
+        end
+      end
+      runs << (start...levels.size)
+
+      # Create result array
+      result = (0...levels.size).to_a
+
+      # Find min and max levels
       min_level = levels.min
       max_level = levels.max
 
-      result = (0...levels.size).to_a
-
+      # If all levels are LTR, no reordering needed
       if min_level == max_level && min_level.ltr?
         return result
       end
 
-      min_rtl = min_level.new_lowest_ge_rtl
-      return result unless min_rtl.is_a?(Level)
-
-      min_rtl_val = min_rtl.value
+      # Apply L2 algorithm
       max_level_val = max_level.value
+      min_rtl = min_level.new_lowest_ge_rtl
+      min_rtl_val = min_rtl.is_a?(Level) ? min_rtl.value : 0
 
-      while min_rtl_val <= max_level_val
-        range = next_range(levels, 0, max_level)
-        while range.end <= levels.size
-          result[range.begin...range.end].reverse!
-          range = next_range(levels, range.end, max_level)
+      while max_level_val >= min_rtl_val
+        # Find sequences of runs at this level or higher and reverse them
+        seq_start = 0
+        while seq_start < runs.size
+          # Check if this run is at current level
+          run = runs[seq_start]
+          level_at_start = levels[run.begin]
+          if level_at_start.value != max_level_val
+            seq_start += 1
+            next
+          end
+
+          # Find end of sequence (runs at same level)
+          seq_end = seq_start + 1
+          while seq_end < runs.size
+            run_next = runs[seq_end]
+            level_at_next = levels[run_next.begin]
+            break if level_at_next.value != max_level_val
+            seq_end += 1
+          end
+
+          # Reverse this sequence in the result
+          # Collect all indices in this sequence
+          seq_indices = [] of Int32
+          (seq_start...seq_end).each do |run_idx|
+            run_range = runs[run_idx]
+            seq_indices.concat(result[run_range])
+          end
+
+          # Reverse and put back
+          seq_indices.reverse!
+          idx = 0
+          (seq_start...seq_end).each do |run_idx|
+            run_range = runs[run_idx]
+            size = run_range.end - run_range.begin
+            result[run_range] = seq_indices[idx, size]
+            idx += size
+          end
+
+          seq_start = seq_end
         end
-        max_level_val = max_level_val == 0 ? 0 : max_level_val - 1
+
+        max_level_val -= 1
       end
 
       result
     end
 
-    private def self.next_range(levels : Array(Level), start_index : Int32, max : Level) : Range(Int32, Int32)
-      return start_index...start_index if levels.empty? || start_index >= levels.size
-
-      i = start_index
-      while i < levels.size && levels[i] < max
-        i += 1
-      end
-
-      return i...i if i >= levels.size
-
-      j = i + 1
-      while j < levels.size && levels[j] < max
-        j += 1
-      end
-
-      i...j
-    end
-
+    # Reorders a line of text for visual display
+    #
+    # Applies the Unicode Bidirectional Algorithm to reorder text within a line
+    # for proper visual display. This is the main method for getting text in
+    # the correct order for rendering.
+    #
+    # Parameters:
+    # - `para`: The paragraph containing the line
+    # - `line`: Byte range within the text representing the line
+    #
+    # Returns: The reordered text as a `String`
+    #
+    # Note: Uses `byte_slice` for correct UTF-8 handling with multi-byte characters.
     def reorder_line(para : ParagraphInfo, line : Range(Int32, Int32)) : String
-      return text[line] unless has_rtl?
+      return text.byte_slice(line.begin, line.end - line.begin) unless has_rtl?
       levels = reordered_levels(para, line)
       _, runs = visual_runs(para, line)
       do_reorder_line(text, line, levels, runs)
     end
 
+    # Finds visual runs within a line
+    #
+    # Returns level runs in visual order as required by the Unicode Bidi Algorithm.
+    # The first return value is levels after applying L1-L2 rules.
+    # The second return value is runs (contiguous same-level ranges) in visual order.
+    #
+    # Parameters:
+    # - `para`: The paragraph containing the line
+    # - `line`: Byte range within the text
+    #
+    # Returns: Tuple of `(Array(Level), Array(Range(Int32, Int32)))`
     def visual_runs(para : ParagraphInfo, line : Range(Int32, Int32)) : Tuple(Array(Level), Array(Range(Int32, Int32)))
       levels = reordered_levels(para, line)
       compute_visual_runs(levels, line)
@@ -378,39 +559,6 @@ module Bidi
       end
       parts.join
     end
-
-    struct Paragraph
-      property info : BidiInfo
-      property para : ParagraphInfo
-
-      def initialize(@info : BidiInfo, @para : ParagraphInfo)
-      end
-
-      def direction : Direction
-        para_direction(@info.levels[@para.range])
-      end
-
-      def level_at(pos : Int32) : Level
-        @info.levels[@para.range.begin + pos]
-      end
-
-      private def para_direction(levels : Array(Level)) : Direction
-        ltr = false
-        rtl = false
-        levels.each do |level|
-          if level.ltr?
-            ltr = true
-            return Direction::Mixed if rtl
-          end
-          if level.rtl?
-            rtl = true
-            return Direction::Mixed if ltr
-          end
-        end
-        return Direction::Ltr if ltr
-        Direction::Rtl
-      end
-    end
   end
 
   def self.get_base_direction(text : String) : Direction
@@ -430,6 +578,8 @@ module Bidi
   end
 
   private def self.get_base_direction_impl(data_source : BidiDataSource, text : String, use_full_text : Bool) : Direction
+    return Direction::Ltr if text.empty?  # Empty text defaults to LTR
+
     isolate_level = 0
     text.each_char do |c|
       case data_source.bidi_class(c)
@@ -449,6 +599,20 @@ module Bidi
     Direction::Mixed
   end
 
+  # Single-paragraph bidirectional analysis for UTF-8 text
+  #
+  # Simplified API for text known to contain only one paragraph.
+  # Provides the same functionality as `BidiInfo` but with a simpler interface
+  # since paragraph handling is not needed.
+  #
+  # Properties:
+  # - `text`: The original input text (single paragraph)
+  # - `original_classes`: BidiClass for each byte in the text
+  # - `levels`: Embedding level for each byte in the text
+  # - `paragraph_level`: Base embedding level for the paragraph
+  # - `is_pure_ltr`: Whether the paragraph contains only LTR content
+  #
+  # This matches the Rust `ParagraphBidiInfo<'text>` struct.
   struct ParagraphBidiInfo
     property text : String
     property original_classes : Array(BidiClass)
@@ -459,10 +623,28 @@ module Bidi
     def initialize(@text : String, @original_classes : Array(BidiClass), @levels : Array(Level), @paragraph_level : Level, @is_pure_ltr : Bool)
     end
 
+    # Creates a new `ParagraphBidiInfo` by analyzing single-paragraph text
+    #
+    # Parameters:
+    # - `text`: The UTF-8 text to analyze (should be a single paragraph)
+    # - `default_para_level`: Optional base paragraph level (nil for auto-detection)
+    #
+    # Returns: `ParagraphBidiInfo` with analysis results
     def self.new(text : String, default_para_level : Level? = nil) : ParagraphBidiInfo
       new_with_data_source(HardcodedBidiData.new, text, default_para_level)
     end
 
+    # Creates a new `ParagraphBidiInfo` with a custom data source
+    #
+    # Lower-level constructor for custom Unicode data sources.
+    # Most users should use `ParagraphBidiInfo.new()` instead.
+    #
+    # Parameters:
+    # - `data_source`: Custom `BidiDataSource` for bidi class lookups
+    # - `text`: The UTF-8 text to analyze
+    # - `default_para_level`: Optional base paragraph level
+    #
+    # Returns: `ParagraphBidiInfo` with analysis results
     def self.new_with_data_source(data_source : BidiDataSource, text : String, default_para_level : Level? = nil) : ParagraphBidiInfo
       original_classes = [] of BidiClass
       para_level = default_para_level
@@ -518,7 +700,70 @@ module Bidi
     end
 
     def reordered_levels(line : Range(Int32, Int32)) : Array(Level)
-      BidiInfo.reordered_levels(ParagraphInfo.new(0...text.bytesize, paragraph_level), line)
+      # Apply L1-L2 rules to the levels
+      reordered_levels_impl(line)
+    end
+
+    private def reordered_levels_impl(line : Range(Int32, Int32)) : Array(Level)
+      # Create a copy of the levels for the line
+      levels = @levels[line].dup
+
+      # Apply L1 rule: Reset whitespace and some formatting characters to paragraph level
+      # http://www.unicode.org/reports/tr9/#L1
+      reset_from = nil.as(Int32?)
+      reset_to = nil.as(Int32?)
+      prev_level = @paragraph_level
+
+      # We need to iterate by character, not by byte
+      # Track byte position manually
+      byte_pos = line.begin
+      @text.byte_slice(line.begin, line.end - line.begin).each_char do |char|
+        char_len = char.bytesize
+
+        case @original_classes[byte_pos]
+        when BidiClass::B, BidiClass::S
+          # Segment separator, Paragraph separator
+          reset_to = byte_pos + char_len
+          reset_from = byte_pos if reset_from.nil?
+        when BidiClass::WS, BidiClass::FSI, BidiClass::LRI, BidiClass::RLI, BidiClass::PDI
+          # Whitespace, isolate formatting
+          reset_from = byte_pos if reset_from.nil?
+        when BidiClass::RLE, BidiClass::LRE, BidiClass::RLO, BidiClass::LRO, BidiClass::PDF, BidiClass::BN
+          # Explicit formatting characters
+          reset_from = byte_pos if reset_from.nil?
+          # Set the level to previous level
+          char_len.times do |i|
+            levels[byte_pos - line.begin + i] = prev_level
+          end
+        else
+          reset_from = nil
+        end
+
+        # Apply reset if we have both from and to
+        if !reset_from.nil? && !reset_to.nil?
+          (reset_from...reset_to).each do |i|
+            if i >= line.begin && i < line.end
+              levels[i - line.begin] = @paragraph_level
+            end
+          end
+          reset_from = nil
+          reset_to = nil
+        end
+
+        prev_level = levels[byte_pos - line.begin] if byte_pos - line.begin < levels.size
+        byte_pos += char_len
+      end
+
+      # Apply any remaining reset
+      if !reset_from.nil?
+        (reset_from...line.end).each do |i|
+          if i < line.end
+            levels[i - line.begin] = @paragraph_level
+          end
+        end
+      end
+
+      levels
     end
 
     def reordered_levels_per_char(line : Range(Int32, Int32)) : Array(Level)
@@ -526,10 +771,10 @@ module Bidi
     end
 
     def reorder_line(line : Range(Int32, Int32)) : String
-      return text[line] if !has_rtl?
+      return text.byte_slice(line.begin, line.end - line.begin) if !has_rtl?
       levels = reordered_levels(line)
       _, runs = visual_runs(line)
-      do_reorder_line(text, line, levels, runs)
+      reorder_line_impl(text, line, levels, runs)
     end
 
     def self.reorder_visual(levels : Array(Level)) : Array(Int32)
@@ -537,9 +782,66 @@ module Bidi
     end
 
     def visual_runs(line : Range(Int32, Int32)) : Tuple(Array(Level), Array(Range(Int32, Int32)))
-      temp_info = BidiInfo.new(text)
-      para = ParagraphInfo.new(0...text.bytesize, paragraph_level)
-      temp_info.visual_runs(para, line)
+      # Get reordered levels for the line
+      levels = reordered_levels(line)
+
+      # Find consecutive level runs
+      runs = [] of Range(Int32, Int32)
+      return {levels, runs} if levels.empty?
+
+      start = line.begin
+      run_level = levels[0]
+      min_level = run_level
+      max_level = run_level
+
+      (line.begin + 1...line.end).each do |i|
+        level_idx = i - line.begin
+        new_level = levels[level_idx]
+
+        if new_level != run_level
+          runs << (start...i)
+          start = i
+          run_level = new_level
+        end
+
+        if new_level.value < min_level.value
+          min_level = new_level
+        elsif new_level.value > max_level.value
+          max_level = new_level
+        end
+      end
+
+      runs << (start...line.end)
+
+      # Reorder runs according to L2 rule
+      max_level_val = max_level.value
+      while max_level_val > 0
+        seq_start = 0
+        while seq_start < runs.size
+          # Skip runs at lower levels
+          level_at_start = levels[runs[seq_start].begin - line.begin]?
+          if level_at_start.nil? || level_at_start.value < max_level_val
+            seq_start += 1
+            next
+          end
+
+          # Find sequence of runs at this level or higher
+          seq_end = seq_start + 1
+          while seq_end < runs.size
+            level_at_end = levels[runs[seq_end].begin - line.begin]?
+            break if level_at_end.nil? || level_at_end.value < max_level_val
+            seq_end += 1
+          end
+
+          # Reverse the sequence
+          runs[seq_start...seq_end].reverse!
+          seq_start = seq_end
+        end
+
+        max_level_val = max_level_val == 0 ? 0 : max_level_val - 1
+      end
+
+      {levels, runs}
     end
 
     def has_rtl? : Bool
@@ -565,7 +867,7 @@ module Bidi
       Direction::Rtl
     end
 
-    private def assign_levels_to_removed_chars(para_level : Level, original_classes : Array(BidiClass), levels : Array(Level)) : Nil
+    private def self.assign_levels_to_removed_chars(para_level : Level, original_classes : Array(BidiClass), levels : Array(Level)) : Nil
       original_classes.size.times do |i|
         bidi_class = original_classes[i]
         if bidi_class.removed_by_x9?
@@ -578,18 +880,24 @@ module Bidi
       end
     end
 
-    private def reorder_line_impl(text : String, line : Range(Int32, Int32), levels : Array(Level), runs : Array(Range(Int32, Int32))) : String
-      return text[line] if runs.empty? || runs.all? { |run| levels[run.begin]?.ltr? }
+    private def assign_levels_to_removed_chars(para_level : Level, original_classes : Array(BidiClass), levels : Array(Level)) : Nil
+      self.class.assign_levels_to_removed_chars(para_level, original_classes, levels)
+    end
 
-      result = String.build(line.end - line.begin)
-      runs.each do |run|
-        if levels[run.begin]?.rtl?
-          text[run].chars.reverse_each { |c| result << c }
-        else
-          result << text[run]
+    private def reorder_line_impl(text : String, line : Range(Int32, Int32), levels : Array(Level), runs : Array(Range(Int32, Int32))) : String
+      return text.byte_slice(line.begin, line.end - line.begin) if runs.empty? || runs.all? { |run| level = levels[run.begin - line.begin]?; level && level.ltr? }
+
+      String.build(line.end - line.begin) do |result|
+        runs.each do |run|
+          run_text = text.byte_slice(run.begin, run.end - run.begin)
+          level = levels[run.begin - line.begin]?
+          if level && level.rtl?
+            run_text.chars.reverse_each { |c| result << c }
+          else
+            result << run_text
+          end
         end
       end
-      result
     end
   end
 end

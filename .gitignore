@@ -11,3 +11,6 @@
 bidi
 .crystal-cache/
 temp/
+
+# Generated documentation
+/docs/api/

@@ -37,6 +37,6 @@ src/prepare.rs::test::test_isolating_run_sequences_sos_and_eos	missing	-	baselin
 src/prepare.rs::test::test_level_runs	ported	spec/prepare_spec.cr:9	test_level_runs ported
 src/prepare.rs::test::test_not_removed_by_x9	ported	spec/prepare_spec.cr:27	test_not_removed_by_x9 ported
 src/prepare.rs::test::test_removed_by_x9	ported	spec/prepare_spec.cr:17	test_removed_by_x9 ported
-tests/conformance_tests.rs::test::test_basic_conformance	missing	-	baseline
-tests/conformance_tests.rs::test::test_character_conformance	missing	-	baseline
-tests/conformance_tests.rs::test::test_gen_char_from_bidi_class	missing	-	baseline
+tests/conformance_tests.rs::test::test_basic_conformance	ported	spec/conformance_full_spec.cr:7	Basic conformance test ported (full BidiTest.txt)
+tests/conformance_tests.rs::test::test_character_conformance	ported	spec/conformance_full_spec.cr:210	Character conformance test ported (BidiCharacterTest.txt)
+tests/conformance_tests.rs::test::test_gen_char_from_bidi_class	ported	spec/conformance_full_spec.cr:355	Character generation test ported

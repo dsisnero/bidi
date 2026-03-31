@@ -4,7 +4,7 @@
 
 module Bidi
   # Status of the directional status stack
-  private struct Status
+  struct Status
     property level : Level
     property status : OverrideStatus
 
@@ -13,7 +13,7 @@ module Bidi
   end
 
   # Override status for the directional status stack
-  private enum OverrideStatus
+  enum OverrideStatus
     Neutral
     RTL
     LTR
@@ -198,8 +198,12 @@ module Bidi
     end
 
     # Add final run
-    if prev_byte_index >= 0
-      runs << LevelRun.new(start + current_run_start, start + prev_byte_index)
+    if current_run_start <= actual_size - 1
+      # Rust uses levels.len() which is text.bytesize
+      # We need to include all bytes up to the end
+      final_run = LevelRun.new(start + current_run_start, start + actual_size - 1)
+
+      runs << final_run
     end
   end
 end

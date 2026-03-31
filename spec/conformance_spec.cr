@@ -14,17 +14,17 @@ describe "Bidi Algorithm Conformance" do
     # Should have one paragraph
     bidi_info.paragraphs.size.should eq 1
 
-    para = bidi_info.paragraphs[0]
+    para_info = bidi_info.paragraphs[0]
 
     # Paragraph should be RTL because first strong character is Hebrew (RTL)
-    para.level.rtl?.should be_true
-    para.level.number.should eq 1
+    para_info.level.rtl?.should be_true
+    para_info.level.number.should eq 1
 
     # The entire text is one line
-    line = para.range
+    line = para_info.range
 
     # Get reordered levels for the line (Rule L1)
-    _ = bidi_info.reordered_levels(para, line)
+    _ = bidi_info.reordered_levels(para_info, line)
 
     # Check that we have RTL levels
     bidi_info.has_rtl?.should be_true

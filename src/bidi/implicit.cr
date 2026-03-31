@@ -68,6 +68,8 @@ def Bidi.resolve_weak(
         end
       when BidiClass::AL
         # W3. Change AL to R.
+        if (i >= 11 && i <= 12) || (i >= 24 && i <= 25)
+        end
         processing_classes[i] = BidiClass::R
       end
 
@@ -495,38 +497,44 @@ def Bidi.resolve_levels(
     next unless bidi_class.not_removed_by_x9?
 
     # DEBUG
-    # puts "resolve_levels[#{i}]: bidi_class=#{bidi_class}, level before=#{levels[i]}"
+    if i == 11 || i == 24 || i == 25
+    end
 
     # I1. For all characters with an even (left-to-right) embedding direction
     # I2. For all characters with an odd (right-to-left) embedding direction
     if levels[i].rtl?
       # Odd level (RTL) - I2
       case bidi_class
-      when BidiClass::L
-        # I2. L -> raise level by 1 (odd → even)
+      when BidiClass::L, BidiClass::EN, BidiClass::AN
+        # I2. L, EN, AN -> raise level by 1 (odd → even for L, odd+1=even for EN/AN)
         level = levels[i]
         level.raise(1_u8)
         levels[i] = level
         # DEBUG
-        # puts "  RTL, L -> raise(1), level after=#{levels[i]}"
-      when BidiClass::R, BidiClass::EN, BidiClass::AN
-        # I2. R, EN, AN -> raise level by 2 (odd → odd+2 = next odd)
-        level = levels[i]
-        level.raise(2_u8)
-        levels[i] = level
+        # puts "  RTL, L/EN/AN -> raise(1), level after=#{levels[i]}"
+      when BidiClass::R
+        # I2. R -> no change (stays odd)
         # DEBUG
-        # puts "  RTL, R/EN/AN -> raise(2), level after=#{levels[i]}"
+        # puts "  RTL, R -> no change"
       end
     else
       # Even level (LTR) - I1
       case bidi_class
-      when BidiClass::R, BidiClass::EN, BidiClass::AN
-        # I1. R, EN, AN -> raise level by 1 (even → odd)
+      when BidiClass::R
+        # I1. R -> raise level by 1 (even → odd)
         level = levels[i]
         level.raise(1_u8)
         levels[i] = level
         # DEBUG
-        # puts "  LTR, R/EN/AN -> raise(1), level after=#{levels[i]}"
+        if i == 11 || i == 24 || i == 25
+        end
+      when BidiClass::EN, BidiClass::AN
+        # I1. EN, AN -> raise level by 2 (even → even+2 = next even)
+        level = levels[i]
+        level.raise(2_u8)
+        levels[i] = level
+        # DEBUG
+        # puts "  LTR, EN/AN -> raise(2), level after=#{levels[i]}"
       when BidiClass::L
         # I1. L -> no change
         # DEBUG

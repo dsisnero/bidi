@@ -140,6 +140,6 @@ src/utf16.rs::struct::ParagraphBidiInfo	struct	ported	src/bidi/utf16.cr:199	Para
 src/utf16.rs::struct::Utf16CharIndexIter	struct	ported	src/bidi/utf16.cr:100	Utf16CharIndexIter class ported
 src/utf16.rs::struct::Utf16CharIter	struct	ported	src/bidi/utf16.cr:114	Utf16CharIter class ported
 src/utf16.rs::struct::Utf16IndexLenIter	struct	ported	src/bidi/utf16.cr:86	Utf16IndexLenIter class ported
-tests/conformance_tests.rs::test::test_basic_conformance	test	missing	-	auto-generated
-tests/conformance_tests.rs::test::test_character_conformance	test	missing	-	auto-generated
-tests/conformance_tests.rs::test::test_gen_char_from_bidi_class	test	missing	-	auto-generated
+tests/conformance_tests.rs::test::test_basic_conformance	test	ported	spec/conformance_full_spec.cr:7	Basic conformance test ported (full BidiTest.txt)
+tests/conformance_tests.rs::test::test_character_conformance	test	ported	spec/conformance_full_spec.cr:210	Character conformance test ported (BidiCharacterTest.txt)
+tests/conformance_tests.rs::test::test_gen_char_from_bidi_class	test	ported	spec/conformance_full_spec.cr:355	Character generation test ported
