@@ -315,11 +315,11 @@ module Bidi
         case bidi_class
         when BidiClass::B, BidiClass::S
           reset_to = idx + char_len
-          reset_from = nil if reset_from.nil?
+          reset_from = idx if reset_from.nil?
         when BidiClass::WS, BidiClass::FSI, BidiClass::LRI, BidiClass::RLI, BidiClass::PDI
-          reset_from = nil if reset_from.nil?
+          reset_from = idx if reset_from.nil?
         when BidiClass::RLE, BidiClass::LRE, BidiClass::RLO, BidiClass::LRO, BidiClass::PDF, BidiClass::BN
-          reset_from = nil if reset_from.nil?
+          reset_from = idx if reset_from.nil?
           char_len.times do |j|
             level_idx = idx + j
             line_levels[level_idx] = prev_level if level_idx < line_levels.size
@@ -350,21 +350,26 @@ module Bidi
     end
 
     def reordered_levels_per_char(para : ParagraphInfo, line : Range(Int32, Int32)) : Array(Level)
-      # line is a byte range, but we need to return levels per character
       levels = reordered_levels(para, line)
       result = [] of Level
 
-      # Iterate over characters in the byte range
+      # Iterate through byte positions, converting to character indices
       byte_pos = line.begin
       while byte_pos < line.end && byte_pos < @text.bytesize
-        char = @text.char_at(byte_pos)
-        break unless char
-        char_len = char.bytesize
+        char_idx = @text.byte_index_to_char_index(byte_pos)
+        if char_idx
+          char = @text[char_idx]
+          char_len = char.bytesize
 
-        # Add the level for this character (use the level of the first byte)
-        result << (levels[byte_pos]? || para.level)
+          # levels is a line-relative slice; index with line-relative position
+          line_rel = byte_pos - line.begin
+          result << (levels[line_rel]? || para.level)
 
-        byte_pos += char_len
+          byte_pos += char_len
+        else
+          # Not at a character boundary, skip to next byte
+          byte_pos += 1
+        end
       end
 
       result
@@ -464,12 +469,14 @@ module Bidi
     private def compute_visual_runs(levels : Array(Level), line : Range(Int32, Int32)) : Tuple(Array(Level), Array(Range(Int32, Int32)))
       runs = [] of Range(Int32, Int32)
       start = line.begin
-      run_level = levels[start]? || Level.ltr
+      # levels is line-relative; use rel(i) = levels[i - line.begin]
+      run_level = levels[0]? || Level.ltr
       min_level = run_level
       max_level = run_level
 
-      ((start + 1)...line.end).each do |i|
-        new_level = levels[i]
+      (1...levels.size).each do |rel_i|
+        i = line.begin + rel_i
+        new_level = levels[rel_i]
         if new_level != run_level
           runs << (start...i)
           start = i
@@ -491,7 +498,8 @@ module Bidi
       while max_level_val >= min_rtl_val
         seq_start = 0
         while seq_start < run_count
-          level_at_start = levels[runs[seq_start].begin]?
+          run_begin = runs[seq_start].begin
+          level_at_start = levels[run_begin - line.begin]?
           if level_at_start.nil? || level_at_start.value < max_level_val
             seq_start += 1
             next
@@ -499,7 +507,7 @@ module Bidi
 
           seq_end = seq_start + 1
           while seq_end < run_count
-            level_at_end = levels[runs[seq_end].begin]?
+            level_at_end = levels[runs[seq_end].begin - line.begin]?
             break if level_at_end.nil? || level_at_end.value < max_level_val
             seq_end += 1
           end

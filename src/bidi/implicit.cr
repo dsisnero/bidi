@@ -27,8 +27,7 @@ def Bidi.resolve_weak(
   et_run_indices = [] of Int32 # for W5
   bn_run_indices = [] of Int32 # for W5 + <https://www.unicode.org/reports/tr9/#Retaining_Explicit_Formatting_Characters>
 
-  sequence.runs.each_with_index do |level_run, _run_index|
-    # puts "resolve_weak: processing run #{run_index}: #{level_run} (processing_classes size: #{processing_classes.size})"
+  sequence.runs.each_with_index do |level_run, run_index|
     level_run.each do |i|
       # Skip BN characters (they're not real for processing)
       if processing_classes[i] == BidiClass::BN
@@ -68,8 +67,6 @@ def Bidi.resolve_weak(
         end
       when BidiClass::AL
         # W3. Change AL to R.
-        if (i >= 11 && i <= 12) || (i >= 24 && i <= 25)
-        end
         processing_classes[i] = BidiClass::R
       end
 
@@ -80,6 +77,7 @@ def Bidi.resolve_weak(
       end
 
       # W4: A single European separator between two European numbers changes to a European number.
+      #     A single common separator between two numbers of the same type changes to that type.
       # W5: A sequence of European terminators adjacent to European numbers changes to all European numbers.
       # W6: Otherwise, separators and terminators change to Other Neutral.
       #
@@ -88,45 +86,65 @@ def Bidi.resolve_weak(
       # <http://www.unicode.org/reports/tr9/#W6>
       class_before_w456 = processing_classes[i]
 
-      # W4.
-      if processing_classes[i] == BidiClass::ES
-        if prev_class_before_w4 == BidiClass::EN && sequence.eos == BidiClass::EN
-          processing_classes[i] = BidiClass::EN
-        end
-      end
+      # W4, W5, W6 combined (behavior match with upstream implicit.rs:116-224)
+      case processing_classes[i]
+      when BidiClass::EN
+        # W5. If a run of ETs is adjacent to an EN, change the ETs to EN.
+        et_run_indices.each { |j| processing_classes[j] = BidiClass::EN }
+        et_run_indices.clear
+      when BidiClass::ES, BidiClass::CS
+        # W4/W6 (separators)
+        # Use byte_index_to_char_index because text[i]? uses character indices
+        if char_idx = text.byte_index_to_char_index(i)
+          ch = text[char_idx]
+          char_len = ch.bytesize
+          next_class = sequence.iter_forwards_from(i + char_len, run_index)
+            .map { |j| processing_classes[j] }
+            .find { |c| c.not_removed_by_x9? }
+          next_class = next_class || sequence.eos
 
-      # W5.
-      if processing_classes[i] == BidiClass::ET
+          if next_class == BidiClass::EN && last_strong_is_al
+            # Apply W2 to next_class
+            next_class = BidiClass::AN
+          end
+
+          processing_classes[i] = case {prev_class_before_w4, processing_classes[i], next_class}
+                                  when {BidiClass::EN, BidiClass::ES, BidiClass::EN},
+                                       {BidiClass::EN, BidiClass::CS, BidiClass::EN}
+                                    BidiClass::EN
+                                  when {BidiClass::AN, BidiClass::CS, BidiClass::AN}
+                                    BidiClass::AN
+                                  else
+                                    # W6 (separators only) — fallthrough to ON
+                                    BidiClass::ON
+                                  end
+
+          # W6 + Retaining Explicit Formatting Characters
+          # If we hit the W6 branch, set adjacent BNs to ON too
+          if processing_classes[i] == BidiClass::ON
+            sequence.iter_backwards_from(i, run_index).each do |idx|
+              break if processing_classes[idx] != BidiClass::BN
+              processing_classes[idx] = BidiClass::ON
+            end
+            sequence.iter_forwards_from(i + char_len, run_index).each do |idx|
+              break if processing_classes[idx] != BidiClass::BN
+              processing_classes[idx] = BidiClass::ON
+            end
+          end
+        else
+          # We're in the middle of a multi-byte character, copy previous byte's result
+          processing_classes[i] = processing_classes[i - 1]
+        end
+      when BidiClass::ET
+        # W5
         if prev_class_before_w5 == BidiClass::EN
           processing_classes[i] = BidiClass::EN
         else
-          # Keep track of ET runs for W6
+          # Retaining Explicit Formatting Characters:
+          # If there was a BN run before this, that's now part of this ET run.
+          et_run_indices.concat(bn_run_indices.dup)
+          # In case this is followed by an EN.
           et_run_indices << i
-          # Also apply to any preceding BN runs
-          bn_run_indices.each do |j|
-            processing_classes[j] = BidiClass::EN
-          end
-          bn_run_indices.clear
-        end
-      elsif processing_classes[i] == BidiClass::EN
-        # Convert any preceding ET runs to EN
-        et_run_indices.each do |j|
-          processing_classes[j] = BidiClass::EN
-        end
-        et_run_indices.clear
-        # Also apply to any preceding BN runs
-        bn_run_indices.each do |j|
-          processing_classes[j] = BidiClass::EN
-        end
-        bn_run_indices.clear
-      end
-
-      # W6 (separators only)
-      if processing_classes[i] == BidiClass::CS
-        if prev_class_before_w4 == BidiClass::EN && sequence.eos == BidiClass::EN
-          processing_classes[i] = BidiClass::EN
-        elsif prev_class_before_w4 == BidiClass::AN && sequence.eos == BidiClass::AN
-          processing_classes[i] = BidiClass::AN
         end
       end
 
@@ -139,15 +157,15 @@ def Bidi.resolve_weak(
       prev_class_before_w5 = processing_classes[i]
 
       # W6 (terminators only)
+      # (see above for W6 separator code)
       if prev_class_before_w5 != BidiClass::ET
-        # W6: If we didn't find an adjacent EN, turn any ETs into ON instead
-        et_run_indices.each do |j|
-          processing_classes[j] = BidiClass::ON
-        end
+        # W6. If we didn't find an adjacent EN, turn any ETs into ON instead.
+        et_run_indices.each { |j| processing_classes[j] = BidiClass::ON }
         et_run_indices.clear
       end
 
-      # Update prev_class_before_w4
+      # We stashed this before W4/5/6 could get their grubby hands on it, and it's not
+      # used in the W6 terminator code below so we can update it now.
       prev_class_before_w4 = class_before_w456
     end
   end
@@ -217,74 +235,53 @@ def Bidi.identify_bracket_pairs(
   text : String,
   data_source : BidiDataSource,
   run_sequence : IsolatingRunSequence,
-  original_classes : Array(BidiClass),
+  processing_classes : Array(BidiClass),
   bracket_pairs : Array(BracketPair),
 ) : Nil
   stack = [] of Tuple(Char, Int32, Int32) # (opening_char, index, run_index)
 
   run_sequence.runs.each_with_index do |level_run, run_index|
-    # Iterate through byte indices in the level run
-    level_run.each do |i|
-      # Check bounds
-      break if i >= text.bytesize
+    # Match Rust: iterate character-start positions within the level run
+    # text.subrange(level_run).char_indices() yields (relative_byte, char)
+    byte_pos = level_run.begin
+    while byte_pos < level_run.end && byte_pos < text.bytesize
+      char_idx = text.byte_index_to_char_index(byte_pos)
+      if char_idx
+        ch = text[char_idx]
+        char_len = ch.bytesize
 
-      # All paren characters are ON.
-      # From BidiBrackets.txt:
-      # > The Unicode property value stability policy guarantees that characters
-      # > which have bpt=o or bpt=c also have bc=ON and Bidi_M=Y
-      if original_classes[i] != BidiClass::ON
-        next
-      end
-
-      # Get character at byte index i
-      # Note: This assumes i is a valid byte index for a character boundary
-      # In a proper implementation, we should use char_indices to handle multi-byte characters
-      ch = text[i]?
-      next unless ch # Skip if out of bounds
-
-      if matched = data_source.bidi_matched_opening_bracket(ch)
-        if matched.is_open
-          # > If an opening paired bracket is found ...
-
-          # > ... and there is no room in the stack,
-          # > stop processing BD16 for the remainder of the isolating run sequence.
-          if stack.size >= 63
-            return
-          end
-          # > ... push its Bidi_Paired_Bracket property value and its text position onto the stack
-          stack.push({matched.opening, i, run_index})
-        else
-          # > If a closing paired bracket is found, do the following
-
-          # > Declare a variable that holds a reference to the current stack element
-          # > and initialize it with the top element of the stack.
-          # AND
-          # > Else, if the current stack element is not at the bottom of the stack
-          stack_index = stack.size - 1
-          while stack_index >= 0
-            element = stack[stack_index]
-            # > Compare the closing paired bracket being inspected or its canonical
-            # > equivalent to the bracket in the current stack element.
-            if element[0] == matched.opening
-              # > If the values match, meaning the two characters form a bracket pair, then
-
-              # > Append the text position in the current stack element together with the
-              # > text position of the closing paired bracket to the list.
-              pair = BracketPair.new(
-                element[1],
-                i,
-                element[2],
-                run_index
-              )
-              bracket_pairs.push(pair)
-
-              # > Pop the stack through the current stack element inclusively.
-              stack = stack[0...stack_index]
-              break
+        # All paren characters are ON.
+        if processing_classes[byte_pos] == BidiClass::ON
+          if matched = data_source.bidi_matched_opening_bracket(ch)
+            if matched.is_open
+              if stack.size >= 63
+                return
+              end
+              stack.push({matched.opening, byte_pos, run_index})
+            else
+              stack_index = stack.size - 1
+              while stack_index >= 0
+                element = stack[stack_index]
+                if element[0] == matched.opening
+                  pair = BracketPair.new(
+                    element[1],
+                    byte_pos,
+                    element[2],
+                    run_index
+                  )
+                  bracket_pairs.push(pair)
+                  stack = stack[0...stack_index]
+                  break
+                end
+                stack_index -= 1
+              end
             end
-            stack_index -= 1
           end
         end
+
+        byte_pos += char_len
+      else
+        byte_pos += 1
       end
     end
   end
@@ -496,10 +493,6 @@ def Bidi.resolve_levels(
     bidi_class = processing_classes[i]
     next unless bidi_class.not_removed_by_x9?
 
-    # DEBUG
-    if i == 11 || i == 24 || i == 25
-    end
-
     # I1. For all characters with an even (left-to-right) embedding direction
     # I2. For all characters with an odd (right-to-left) embedding direction
     if levels[i].rtl?
@@ -510,8 +503,6 @@ def Bidi.resolve_levels(
         level = levels[i]
         level.raise(1_u8)
         levels[i] = level
-        # DEBUG
-        # puts "  RTL, L/EN/AN -> raise(1), level after=#{levels[i]}"
       when BidiClass::R
         # I2. R -> no change (stays odd)
         # DEBUG
@@ -525,20 +516,13 @@ def Bidi.resolve_levels(
         level = levels[i]
         level.raise(1_u8)
         levels[i] = level
-        # DEBUG
-        if i == 11 || i == 24 || i == 25
-        end
       when BidiClass::EN, BidiClass::AN
         # I1. EN, AN -> raise level by 2 (even → even+2 = next even)
         level = levels[i]
         level.raise(2_u8)
         levels[i] = level
-        # DEBUG
-        # puts "  LTR, EN/AN -> raise(2), level after=#{levels[i]}"
       when BidiClass::L
         # I1. L -> no change
-        # DEBUG
-        # puts "  LTR, L -> no change"
       end
     end
 
