@@ -14,3 +14,4 @@ temp/
 
 # Generated documentation
 /docs/api/
+._*
