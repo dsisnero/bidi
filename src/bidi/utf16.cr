@@ -66,13 +66,17 @@ module Bidi
       def self.char_at(text : Array(UInt16), index : Int32) : Tuple(Char, Int32)?
         return nil if index < 0 || index >= text.size
 
-        if text[index] < 0xD800 || text[index] > 0xDBFF
-          if text[index] < 0xDC00 || text[index] > 0xDFFF
-            char = text[index].chr rescue '\uFFFD'
-            return {char, 1}
-          else
-            return {'\uFFFD', 1}
+        # Low surrogate that's part of a valid pair → not a character boundary
+        if text[index] >= 0xDC00 && text[index] <= 0xDFFF
+          if index > 0 && text[index - 1] >= 0xD800 && text[index - 1] <= 0xDBFF
+            return nil
           end
+          return {'\uFFFD', 1}
+        end
+
+        if text[index] < 0xD800 || text[index] > 0xDBFF
+          char = text[index].chr rescue '\uFFFD'
+          return {char, 1}
         elsif index + 1 < text.size && text[index + 1] >= 0xDC00 && text[index + 1] <= 0xDFFF
           code = ((text[index].to_i32 - 0xD800) << 10) + (text[index + 1].to_i32 - 0xDC00) + 0x10000
           return {code.chr, 2}
@@ -291,7 +295,76 @@ module Bidi
       end
 
       def reordered_levels(para : ParagraphInfo, line : Range(Int32, Int32)) : Array(Level)
-        @levels[line]
+        return @levels[line] if line.begin >= line.end || line.end > @levels.size
+
+        levels = @levels.dup
+        line_levels = levels[line]
+        para_level = para.level
+
+        # Apply L1 rule: Reset whitespace and some formatting characters to paragraph level
+        # http://www.unicode.org/reports/tr9/#L1
+        # Match Rust upstream reorder_levels for UTF-16 (utf16.rs:226-238)
+        reset_from : Int32? = nil
+        reset_to : Int32? = nil
+        prev_level = para_level
+
+        # Iterate through code units (each u16 is a code unit)
+        i = line.begin
+        while i < line.end && i < @text.size
+          u16 = @text[i]
+          bidi_class = @original_classes[i]
+
+          # Determine code unit length (1 for BMP, 2 for surrogate pairs)
+          # Surrogate pairs: high surrogate (0xD800-0xDBFF) followed by low surrogate (0xDC00-0xDFFF)
+          is_high_surrogate = u16 >= 0xD800 && u16 <= 0xDBFF
+          is_low_surrogate = u16 >= 0xDC00 && u16 <= 0xDFFF
+          char_len = is_low_surrogate ? 1 : (is_high_surrogate ? 2 : 1)
+
+          unless is_low_surrogate
+            # Process only at character-start positions (skip low surrogates)
+            case bidi_class
+            when BidiClass::B, BidiClass::S
+              reset_to = i + char_len
+              reset_from = i if reset_from.nil?
+            when BidiClass::WS, BidiClass::FSI, BidiClass::LRI, BidiClass::RLI, BidiClass::PDI
+              reset_from = i if reset_from.nil?
+            when BidiClass::RLE, BidiClass::LRE, BidiClass::RLO, BidiClass::LRO, BidiClass::PDF, BidiClass::BN
+              reset_from = i if reset_from.nil?
+              char_len.times do |j|
+                level_idx = i + j - line.begin
+                line_levels[level_idx] = prev_level if level_idx < line_levels.size
+              end
+            else
+              reset_from = nil
+            end
+
+            if !reset_from.nil? && !reset_to.nil?
+              (reset_from...reset_to).each do |lidx|
+                rel = lidx - line.begin
+                line_levels[rel] = para_level if rel >= 0 && rel < line_levels.size
+              end
+              reset_from = nil
+              reset_to = nil
+            end
+
+            prev_level = line_levels[i - line.begin] if i - line.begin < line_levels.size
+          end
+
+          i += char_len
+        end
+
+        if !reset_from.nil?
+          (reset_from...line.end).each do |lidx|
+            rel = lidx - line.begin
+            line_levels[rel] = para_level if rel >= 0 && rel < line_levels.size
+          end
+        end
+
+        line_levels
+      end
+
+      def reordered_levels_per_char(para : ParagraphInfo, line : Range(Int32, Int32)) : Array(Level)
+        reordered_levels(para, line)
       end
 
       # Reorders a line of UTF-16 text for visual display
@@ -462,136 +535,112 @@ module Bidi
 
       end_pos = start + actual_size
       (start...end_pos).each do |i|
-        bidi_class = processing_classes[i]
+        # Match Rust: use original_classes[i] for the class dispatch
+        bidi_class = original_classes[i]
 
-        # X2-X5c
+        # X2-X5c: Explicit formatting characters
+        # Match Rust explicit.rs:67-123 exactly
         case bidi_class
-        when BidiClass::RLE
-          # X2. RLE
-          new_level_result = stack.last.level.new_explicit_next_rtl
-          if new_level_result.is_a?(Level) && overflow_isolate_count == 0 && overflow_embedding_count == 0
-            new_level = new_level_result.as(Level)
-            stack << Status.new(new_level, OverrideStatus::Neutral)
-            levels[i] = new_level
-          elsif overflow_isolate_count == 0
-            overflow_embedding_count += 1
+        when BidiClass::RLE, BidiClass::LRE, BidiClass::RLO, BidiClass::LRO, BidiClass::RLI, BidiClass::LRI, BidiClass::FSI
+          # <https://www.unicode.org/reports/tr9/#Retaining_Explicit_Formatting_Characters>
+          levels[i] = stack.last.level
+
+          is_isolate = bidi_class == BidiClass::RLI || bidi_class == BidiClass::LRI || bidi_class == BidiClass::FSI
+          if is_isolate
+            case stack.last.status
+            when OverrideStatus::RTL
+              processing_classes[i] = BidiClass::R
+            when OverrideStatus::LTR
+              processing_classes[i] = BidiClass::L
+            end
           end
-          processing_classes[i] = BidiClass::BN
-        when BidiClass::LRE
-          # X3. LRE
-          new_level_result = stack.last.level.new_explicit_next_ltr
+
+          new_level_result = if bidi_class == BidiClass::RLE || bidi_class == BidiClass::RLO || bidi_class == BidiClass::RLI
+                               stack.last.level.new_explicit_next_rtl
+                             else
+                               stack.last.level.new_explicit_next_ltr
+                             end
+
           if new_level_result.is_a?(Level) && overflow_isolate_count == 0 && overflow_embedding_count == 0
             new_level = new_level_result.as(Level)
-            stack << Status.new(new_level, OverrideStatus::Neutral)
-            levels[i] = new_level
-          elsif overflow_isolate_count == 0
-            overflow_embedding_count += 1
-          end
-          processing_classes[i] = BidiClass::BN
-        when BidiClass::RLO
-          # X4. RLO
-          new_level_result = stack.last.level.new_explicit_next_rtl
-          if new_level_result.is_a?(Level) && overflow_isolate_count == 0 && overflow_embedding_count == 0
-            new_level = new_level_result.as(Level)
-            stack << Status.new(new_level, OverrideStatus::RTL)
-            levels[i] = new_level
-          elsif overflow_isolate_count == 0
-            overflow_embedding_count += 1
-          end
-          processing_classes[i] = BidiClass::BN
-        when BidiClass::LRO
-          # X5. LRO
-          new_level_result = stack.last.level.new_explicit_next_ltr
-          if new_level_result.is_a?(Level) && overflow_isolate_count == 0 && overflow_embedding_count == 0
-            new_level = new_level_result.as(Level)
-            stack << Status.new(new_level, OverrideStatus::LTR)
-            levels[i] = new_level
-          elsif overflow_isolate_count == 0
-            overflow_embedding_count += 1
-          end
-          processing_classes[i] = BidiClass::BN
-        when BidiClass::RLI
-          # X5a. RLI
-          new_level_result = stack.last.level.new_explicit_next_rtl
-          if new_level_result.is_a?(Level) && overflow_isolate_count == 0 && overflow_embedding_count == 0
-            new_level = new_level_result.as(Level)
-            valid_isolate_count += 1
-            stack << Status.new(new_level, OverrideStatus::Isolate)
-          else
+            stack << Status.new(new_level,
+              case bidi_class
+              when BidiClass::RLO       then OverrideStatus::RTL
+              when BidiClass::LRO       then OverrideStatus::LTR
+              when BidiClass::RLI, BidiClass::LRI, BidiClass::FSI then OverrideStatus::Isolate
+              else                           OverrideStatus::Neutral
+              end
+            )
+
+            if is_isolate
+              valid_isolate_count += 1
+            else
+              levels[i] = new_level
+            end
+          elsif is_isolate
             overflow_isolate_count += 1
+          elsif overflow_isolate_count == 0
+            overflow_embedding_count += 1
           end
-          processing_classes[i] = BidiClass::BN
-        when BidiClass::LRI
-          # X5b. LRI
-          new_level_result = stack.last.level.new_explicit_next_ltr
-          if new_level_result.is_a?(Level) && overflow_isolate_count == 0 && overflow_embedding_count == 0
-            new_level = new_level_result.as(Level)
-            valid_isolate_count += 1
-            stack << Status.new(new_level, OverrideStatus::Isolate)
-          else
-            overflow_isolate_count += 1
+
+          unless is_isolate
+            processing_classes[i] = BidiClass::BN
           end
-          processing_classes[i] = BidiClass::BN
-        when BidiClass::FSI
-          # X5c. FSI
-          # For now, treat as LRI (will be updated in compute_initial_info if strong char found)
-          new_level_result = stack.last.level.new_explicit_next_ltr
-          if new_level_result.is_a?(Level) && overflow_isolate_count == 0 && overflow_embedding_count == 0
-            new_level = new_level_result.as(Level)
-            valid_isolate_count += 1
-            stack << Status.new(new_level, OverrideStatus::Isolate)
-          else
-            overflow_isolate_count += 1
-          end
-          processing_classes[i] = BidiClass::BN
         when BidiClass::PDI
-          # X6a. PDI
+          # X6a. PDI — match Rust explicit.rs:126-151
           if overflow_isolate_count > 0
             overflow_isolate_count -= 1
           elsif valid_isolate_count > 0
             overflow_embedding_count = 0
-            while stack.last.status.isolate?
-              stack.pop
+            # Pop until we find the isolate (inclusive)
+            loop do
+              popped = stack.pop?
+              break if popped.nil? || popped.status == OverrideStatus::Isolate
             end
-            stack.pop if !stack.empty?
             valid_isolate_count -= 1
           end
-          processing_classes[i] = BidiClass::BN
+          last = stack.last
+          levels[i] = last.level
+          case last.status
+          when OverrideStatus::RTL
+            processing_classes[i] = BidiClass::R
+          when OverrideStatus::LTR
+            processing_classes[i] = BidiClass::L
+          end
         when BidiClass::PDF
-          # X7. PDF
+          # X7. PDF — match Rust explicit.rs:153-167
           if overflow_isolate_count > 0
-            # Do nothing
+            # do nothing
           elsif overflow_embedding_count > 0
             overflow_embedding_count -= 1
-          elsif valid_isolate_count == 0 && stack.size >= 2 && !stack.last.status.isolate?
+          elsif stack.last.status != OverrideStatus::Isolate && stack.size >= 2
             stack.pop
           end
+          # <https://www.unicode.org/reports/tr9/#Retaining_Explicit_Formatting_Characters>
+          levels[i] = stack.last.level
           processing_classes[i] = BidiClass::BN
         when BidiClass::B
-          # X8. All explicit directional embeddings and isolates are completely terminated at the end of each paragraph.
-          # Reset everything
-          stack = [Status.new(para_level, OverrideStatus::Neutral)]
-          overflow_isolate_count = 0
-          overflow_embedding_count = 0
-          valid_isolate_count = 0
+          # X8. Nothing for paragraph separator in explicit processing.
+          # Paragraphs are split in compute_initial_info.
+          # Match Rust explicit.rs:171
         else
-          # X6. For all characters besides the ones handled above
-          # Set the level of the character to the current embedding level
-          current_level = stack.last.level
-          case stack.last.status
-          when Bidi::OverrideStatus::LTR
-            processing_classes[i] = BidiClass::L
-          when Bidi::OverrideStatus::RTL
-            processing_classes[i] = BidiClass::R
+          # X6. For all other characters — match Rust explicit.rs:174-186
+          levels[i] = stack.last.level
+          if original_classes[i] != BidiClass::BN
+            case stack.last.status
+            when OverrideStatus::RTL
+              processing_classes[i] = BidiClass::R
+            when OverrideStatus::LTR
+              processing_classes[i] = BidiClass::L
+            end
           end
-          levels[i] = current_level
         end
 
-        # Track level runs (BD7)
+        # Track level runs (BD7) — match Rust: skip removed_by_x9 characters
         if i == start
           current_run_level = levels[i]
           current_run_start = i
-        elsif levels[i] != current_run_level
+        elsif !original_classes[i].removed_by_x9? && levels[i] != current_run_level
           runs << (current_run_start...i)
           current_run_level = levels[i]
           current_run_start = i
@@ -610,9 +659,145 @@ module Bidi
       processing_classes : Array(BidiClass),
       start : Int32 = 0,
     ) : Nil
-      # Use the same implementation as UTF-8 since it only works with indices and classes
-      # The text parameter is not used in the weak resolution rules
-      Bidi.resolve_weak("", sequence, processing_classes, start)
+      # Same algorithm as Bidi.resolve_weak but with UTF-16 character length semantics.
+      # In UTF-16: BMP chars are 1 code unit, surrogate pairs are 2 code units.
+
+      prev_class_before_w4 = sequence.sos
+      prev_class_before_w5 = sequence.sos
+      prev_class_before_w1 = sequence.sos
+      last_strong_is_al = false
+      et_run_indices = [] of Int32
+      bn_run_indices = [] of Int32
+
+      sequence.runs.each_with_index do |level_run, run_index|
+        level_run.each do |i|
+          if processing_classes[i] == BidiClass::BN
+            bn_run_indices << i
+            next
+          end
+
+          w2_processing_class = processing_classes[i]
+
+          # W1
+          if processing_classes[i] == BidiClass::NSM
+            processing_classes[i] = case prev_class_before_w1
+                                    when BidiClass::RLI, BidiClass::LRI, BidiClass::FSI, BidiClass::PDI
+                                      BidiClass::ON
+                                    else
+                                      prev_class_before_w1
+                                    end
+            w2_processing_class = processing_classes[i]
+          end
+
+          prev_class_before_w1 = processing_classes[i]
+
+          # W2 and W3
+          case processing_classes[i]
+          when BidiClass::EN
+            if last_strong_is_al
+              processing_classes[i] = BidiClass::AN
+            end
+          when BidiClass::AL
+            processing_classes[i] = BidiClass::R
+          end
+
+          case w2_processing_class
+          when BidiClass::L, BidiClass::R
+            last_strong_is_al = w2_processing_class == BidiClass::AL
+          end
+
+          # W4/W5/W6 combined (match upstream implicit.rs:116-224)
+          class_before_w456 = processing_classes[i]
+
+          case processing_classes[i]
+          when BidiClass::EN
+            et_run_indices.each { |j| processing_classes[j] = BidiClass::EN }
+            et_run_indices.clear
+          when BidiClass::ES, BidiClass::CS
+            # UTF-16: determine code unit length at position i
+            if i < text.size
+              u16 = text[i]
+              is_high = u16 >= 0xD800 && u16 <= 0xDBFF
+              is_low = u16 >= 0xDC00 && u16 <= 0xDFFF
+              if is_low
+                # Low surrogate — copy from previous code unit
+                processing_classes[i] = processing_classes[i - 1]
+              else
+                char_len = is_high ? 2 : 1
+                next_class = sequence.iter_forwards_from(i + char_len, run_index)
+                  .map { |j| processing_classes[j] }
+                  .find { |c| c.not_removed_by_x9? }
+                next_class = next_class || sequence.eos
+
+                if next_class == BidiClass::EN && last_strong_is_al
+                  next_class = BidiClass::AN
+                end
+
+                processing_classes[i] = case {prev_class_before_w4, processing_classes[i], next_class}
+                                        when {BidiClass::EN, BidiClass::ES, BidiClass::EN},
+                                             {BidiClass::EN, BidiClass::CS, BidiClass::EN}
+                                          BidiClass::EN
+                                        when {BidiClass::AN, BidiClass::CS, BidiClass::AN}
+                                          BidiClass::AN
+                                        else
+                                          BidiClass::ON
+                                        end
+
+                if processing_classes[i] == BidiClass::ON
+                  sequence.iter_backwards_from(i, run_index).each do |idx|
+                    break if processing_classes[idx] != BidiClass::BN
+                    processing_classes[idx] = BidiClass::ON
+                  end
+                  sequence.iter_forwards_from(i + char_len, run_index).each do |idx|
+                    break if processing_classes[idx] != BidiClass::BN
+                    processing_classes[idx] = BidiClass::ON
+                  end
+                end
+              end
+            else
+              processing_classes[i] = processing_classes[i - 1]
+            end
+          when BidiClass::ET
+            if prev_class_before_w5 == BidiClass::EN
+              processing_classes[i] = BidiClass::EN
+            else
+              et_run_indices.concat(bn_run_indices.dup)
+              et_run_indices << i
+            end
+          end
+
+          bn_run_indices.clear
+          prev_class_before_w5 = processing_classes[i]
+
+          if prev_class_before_w5 != BidiClass::ET
+            et_run_indices.each { |j| processing_classes[j] = BidiClass::ON }
+            et_run_indices.clear
+          end
+
+          prev_class_before_w4 = class_before_w456
+        end
+      end
+
+      # Final W6 check
+      et_run_indices.each { |j| processing_classes[j] = BidiClass::ON }
+      et_run_indices.clear
+
+      # W7
+      last_strong_is_l = sequence.sos == BidiClass::L
+      sequence.runs.each do |level_run|
+        level_run.each do |i|
+          case processing_classes[i]
+          when BidiClass::EN
+            if last_strong_is_l
+              processing_classes[i] = BidiClass::L
+            end
+          when BidiClass::L
+            last_strong_is_l = true
+          when BidiClass::R, BidiClass::AL
+            last_strong_is_l = false
+          end
+        end
+      end
     end
 
     def self.resolve_neutral_utf16(
@@ -668,36 +853,61 @@ module Bidi
         end
       end
 
-      # N1-N2: Process neutrals
-      sequence.runs.each do |level_run|
-        prev_strong = sequence.sos
-        level_run.each do |i|
-          bidi_class = processing_classes[i]
-          if Bidi.ni?(bidi_class)
-            # N1. A sequence of neutrals takes the direction of the surrounding strong text
-            # N2. Any remaining neutrals take the embedding direction
-            next_strong = nil.as(BidiClass?)
+      # N1-N2: Process neutrals within THIS sequence only
+      # Match Rust implicit.rs:429-485 exactly
+      index_iter = sequence.runs.flat_map(&.to_a).each
+      prev_strong = sequence.sos
 
-            # Find next strong character
-            j = i + 1
-            while j < processing_classes.size
-              if !Bidi.ni?(processing_classes[j])
-                next_strong = processing_classes[j]
+      loop do
+        i_value = index_iter.next
+        break if i_value.is_a?(Iterator::Stop)
+        i = i_value.as(Int32)
+
+        bidi_class = processing_classes[i]
+        if Bidi.ni?(bidi_class) || bidi_class == BidiClass::BN
+          # Collect consecutive NI characters
+          ni_run = [i] of Int32
+          next_class : BidiClass? = nil
+
+          loop do
+            j_value = index_iter.next
+            if j_value.is_a?(Iterator::Stop)
+              next_class = sequence.eos
+              break
+            else
+              j_idx = j_value.as(Int32)
+              next_class = processing_classes[j_idx]
+              if Bidi.ni?(next_class) || next_class == BidiClass::BN
+                i = j_idx
+                ni_run << j_idx
+              else
+                i = j_idx  # Update i to the non-NI index so outer loop processes it
                 break
               end
-              j += 1
             end
-            next_strong ||= sequence.eos
-
-            if prev_strong == next_strong
-              processing_classes[i] = prev_strong
-            else
-              processing_classes[i] = e
-            end
-          else
-            prev_strong = bidi_class
           end
+
+          # N1-N2 resolution
+          new_class = case {prev_strong, next_class}
+                      when {BidiClass::L, BidiClass::L}
+                        BidiClass::L
+                      when {BidiClass::R, BidiClass::R},
+                           {BidiClass::R, BidiClass::AN},
+                           {BidiClass::R, BidiClass::EN},
+                           {BidiClass::AN, BidiClass::R},
+                           {BidiClass::AN, BidiClass::AN},
+                           {BidiClass::AN, BidiClass::EN},
+                           {BidiClass::EN, BidiClass::R},
+                           {BidiClass::EN, BidiClass::AN},
+                           {BidiClass::EN, BidiClass::EN}
+                        BidiClass::R
+                      else
+                        e
+                      end
+
+          ni_run.each { |idx| processing_classes[idx] = new_class }
         end
+        prev_strong = processing_classes[i]
       end
     end
 

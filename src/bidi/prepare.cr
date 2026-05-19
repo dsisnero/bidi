@@ -181,6 +181,7 @@ module Bidi
     # We can take a simplified path to handle this case.
     if !has_isolate_controls
       runs.each do |run|
+        next if run.begin >= run.end  # Skip empty runs
         # Determine the `sos` and `eos` class for the sequence.
         # <http://www.unicode.org/reports/tr9/#X10>
 
@@ -254,7 +255,7 @@ module Bidi
     stack = [[] of LevelRun]
 
     runs.each do |run|
-      raise "Empty run" if run.begin >= run.end
+      next if run.begin >= run.end  # Skip empty runs
       raise "Empty stack" if stack.empty?
 
       start_class = original_classes[run.begin]
