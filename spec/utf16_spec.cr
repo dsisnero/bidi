@@ -91,4 +91,62 @@ describe Bidi::UTF16 do
       info.paragraph_level.rtl?.should be_true
     end
   end
+
+  describe "UTF-16 text source" do
+    it "handles char_at with surrogate pairs and unpaired surrogates" do
+      # Rust test_utf16_text_source (lib.rs:1436)
+      text = [0x41_u16, 0xD801_u16, 0xDC01_u16, 0x20_u16, 0xD800_u16, 0x20_u16, 0xDFFF_u16, 0x20_u16, 0xDC00_u16, 0xD800_u16]
+
+      # UTF16::TextSource.char_at
+      t = Bidi::UTF16::TextSource
+      result = t.char_at(text, 0)
+      result.should_not be_nil
+      r = result.not_nil!
+      r[0].should eq 'A'
+      r[1].should eq 1
+
+      result = t.char_at(text, 1)
+      result.should_not be_nil
+      r = result.not_nil!
+      r[0].should eq '\u{10401}'
+      r[1].should eq 2
+
+      # Mid-surrogate returns nil
+      t.char_at(text, 2).should be_nil
+
+      result = t.char_at(text, 3)
+      result.should_not be_nil
+      r = result.not_nil!
+      r[0].should eq ' '
+      r[1].should eq 1
+
+      # Unpaired high surrogate → REPLACEMENT_CHARACTER
+      result = t.char_at(text, 4)
+      result.should_not be_nil
+      r = result.not_nil!
+      r[0].should eq '\u{FFFD}'
+      r[1].should eq 1
+
+      # Unpaired low surrogate → REPLACEMENT_CHARACTER
+      result = t.char_at(text, 6)
+      result.should_not be_nil
+      r = result.not_nil!
+      r[0].should eq '\u{FFFD}'
+      r[1].should eq 1
+    end
+
+    it "iterates chars with surrogate pairs" do
+      # Rust test_utf16_char_iter (lib.rs:1453)
+      text = [0x41_u16, 0xD801_u16, 0xDC01_u16, 0x20_u16, 0xD800_u16, 0x20_u16, 0xDFFF_u16, 0x20_u16, 0xDC00_u16, 0xD800_u16]
+
+      chars = [] of Char
+      Bidi::UTF16::TextSource.each_char(text) { |c| chars << c }
+      chars.size.should eq 9
+
+      chars[0].should eq 'A'
+      chars[1].should eq '\u{10401}'
+      chars[2].should eq ' '
+      chars[3].should eq '\u{FFFD}'
+    end
+  end
 end

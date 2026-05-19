@@ -214,14 +214,13 @@ describe "Rust API Compatibility Tests" do
       reordered.should eq "abcגבא" # "abc" + "אבג" reversed
     end
 
-    pending "tests reordered_levels on ParagraphBidiInfo" do
+    it "tests reordered_levels on ParagraphBidiInfo" do
       text = "abcאבג"
       info = Bidi::ParagraphBidiInfo.new(text, nil)
 
       line = 0...text.bytesize
-      # TODO: Fix reordered_levels implementation
-      # levels = info.reordered_levels(line)
-      # levels.size.should eq text.bytesize
+      levels = info.reordered_levels(line)
+      levels.size.should eq text.bytesize
     end
 
     it "tests visual_runs on ParagraphBidiInfo" do

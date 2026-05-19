@@ -247,4 +247,84 @@ describe Bidi do
       info.paragraphs[1].length.should eq text2.bytesize
     end
   end
+
+  describe "has_rtl tests" do
+    it "correctly detects RTL content" do
+      tests = [
+        # ASCII only
+        {"123", nil, false},
+        {"123", Bidi::Level.ltr, false},
+        {"123", Bidi::Level.rtl, false},
+        {"abc", nil, false},
+        {"abc", Bidi::Level.ltr, false},
+        {"abc", Bidi::Level.rtl, false},
+        {"abc 123", nil, false},
+        {"abc\n123", nil, false},
+        # With Hebrew
+        {"\u{05D0}\u{05D1}\u{05BC}\u{05D2}", nil, true},
+        {"\u{05D0}\u{05D1}\u{05BC}\u{05D2}", Bidi::Level.ltr, true},
+        {"\u{05D0}\u{05D1}\u{05BC}\u{05D2}", Bidi::Level.rtl, true},
+        {"abc \u{05D0}\u{05D1}\u{05BC}\u{05D2}", nil, true},
+        {"abc\n\u{05D0}\u{05D1}\u{05BC}\u{05D2}", nil, true},
+        {"\u{05D0}\u{05D1}\u{05BC}\u{05D2} abc", nil, true},
+        {"\u{05D0}\u{05D1}\u{05BC}\u{05D2}\nabc", nil, true},
+        {"\u{05D0}\u{05D1}\u{05BC}\u{05D2} 123", nil, true},
+        {"\u{05D0}\u{05D1}\u{05BC}\u{05D2}\n123", nil, true},
+      ]
+
+      tests.each do |text, para_level, expected|
+        info = Bidi::BidiInfo.new(text, para_level)
+        info.has_rtl?.should eq expected
+      end
+    end
+  end
+
+  describe "ParagraphBidiInfo tests" do
+    it "handles text with paragraph breaks in single-paragraph API" do
+      # Test cases from Rust test_paragraph_bidi_info (lib.rs:1817)
+      # The ParagraphBidiInfo API treats embedded paragraph breaks as regular separators
+      tests = [
+        {
+          text:                    "a א.\nג",
+          para_level:              nil,
+          exp_original_classes_8:  [Bidi::BidiClass::L, Bidi::BidiClass::WS, Bidi::BidiClass::R, Bidi::BidiClass::R, Bidi::BidiClass::CS, Bidi::BidiClass::B, Bidi::BidiClass::R, Bidi::BidiClass::R],
+        },
+        {
+          text:                    "\u{5D1} a.\nb.",
+          para_level:              nil,
+          exp_original_classes_8:  [Bidi::BidiClass::R, Bidi::BidiClass::R, Bidi::BidiClass::WS, Bidi::BidiClass::L, Bidi::BidiClass::CS, Bidi::BidiClass::B, Bidi::BidiClass::L, Bidi::BidiClass::CS],
+        },
+        {
+          text:                    "a א.\tג",
+          para_level:              nil,
+          exp_original_classes_8:  [Bidi::BidiClass::L, Bidi::BidiClass::WS, Bidi::BidiClass::R, Bidi::BidiClass::R, Bidi::BidiClass::CS, Bidi::BidiClass::S, Bidi::BidiClass::R, Bidi::BidiClass::R],
+        },
+      ]
+
+      tests.each do |t|
+        info = Bidi::ParagraphBidiInfo.new(t[:text], t[:para_level])
+        info.original_classes.should eq t[:exp_original_classes_8]
+        info.text.should eq t[:text]
+        info.is_pure_ltr.should be_false
+      end
+    end
+  end
+
+  describe "reordered levels range tests" do
+    it "produces valid runs for sub-paragraph ranges" do
+      # Test from Rust test_reordered_levels_range (lib.rs:2047)
+      s = "\u{202A}A\u{202C}\u{202A}A\u{202C}"
+      range = 4...11
+      bidi = Bidi::BidiInfo.new(s, nil)
+
+      _, runs = bidi.visual_runs(bidi.paragraphs[0], range)
+
+      # All runs should produce valid byte slices of s
+      runs.each do |run|
+        # Should not raise when slicing
+        s.byte_slice(run.begin, run.end - run.begin)
+      end
+      runs.size.should be > 0
+    end
+  end
 end

@@ -137,7 +137,7 @@ describe "Bidi Algorithm Simple Conformance" do
       },
       {
         input_chars:          ['\u{0590}'], # R class
-        input_base_level_idx: 0,            # LTR
+        input_base_level_idx: 2,            # auto (nil) — auto-detect from first strong char
         exp_base_level:       1,            # First strong char is R, so paragraph is RTL
         exp_levels:           ["1"],
         exp_ordering:         ["0"],

@@ -103,5 +103,41 @@ describe Bidi do
       sequences[1].runs.should eq([2...3])
       sequences[2].runs.should eq([5...6])
     end
+
+    # Test SOS and EOS values per X10 examples
+    it "verifies sos and eos values for example 1" do
+      # text1·RLE·text2·LRE·text3·PDF·text4·PDF·RLE·text5·PDF·text6
+      # index        0    1  2    3  4    5  6    7    8  9   10  11
+      classes = [
+        Bidi::BidiClass::L, Bidi::BidiClass::RLE, Bidi::BidiClass::L,
+        Bidi::BidiClass::LRE, Bidi::BidiClass::L, Bidi::BidiClass::PDF,
+        Bidi::BidiClass::L, Bidi::BidiClass::PDF, Bidi::BidiClass::RLE,
+        Bidi::BidiClass::L, Bidi::BidiClass::PDF, Bidi::BidiClass::L,
+      ]
+      levels = Bidi::Level.vec([0_u8, 1_u8, 1_u8, 2_u8, 2_u8, 2_u8, 1_u8, 1_u8, 1_u8, 1_u8, 1_u8, 0_u8])
+      para_level = Bidi::Level.ltr
+      runs = Bidi.level_runs(levels, classes)
+
+      sequences = [] of Bidi::IsolatingRunSequence
+      Bidi.isolating_run_sequences(para_level, classes, levels, runs, false, sequences)
+      sequences.sort_by!(&.runs[0].begin)
+
+      sequences.size.should eq 5
+      # text1
+      sequences[0].sos.should eq Bidi::BidiClass::L
+      sequences[0].eos.should eq Bidi::BidiClass::R
+      # text2
+      sequences[1].sos.should eq Bidi::BidiClass::R
+      sequences[1].eos.should eq Bidi::BidiClass::L
+      # text3
+      sequences[2].sos.should eq Bidi::BidiClass::L
+      sequences[2].eos.should eq Bidi::BidiClass::L
+      # text4 text5
+      sequences[3].sos.should eq Bidi::BidiClass::L
+      sequences[3].eos.should eq Bidi::BidiClass::R
+      # text6
+      sequences[4].sos.should eq Bidi::BidiClass::R
+      sequences[4].eos.should eq Bidi::BidiClass::L
+    end
   end
 end
