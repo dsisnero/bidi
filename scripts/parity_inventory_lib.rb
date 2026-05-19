@@ -4,7 +4,7 @@
 require 'fileutils'
 
 module ParityInventory
-  SUPPORTED_LANGUAGES = %w[go rust crystal java ruby].freeze
+  SUPPORTED_LANGUAGES = %w[go rust crystal java ruby typescript].freeze
 
   Item = Struct.new(:id, :kind, :scope, :file, :name, keyword_init: true)
 
@@ -23,12 +23,20 @@ module ParityInventory
     vendor.exist? ? vendor : root
   end
 
+  # Check if tree-sitter parsing is available, trying:
+  # 1. Crystal discovery binary (preferred — supports 10 languages, query patterns, non-blocking)
+  # 2. Ruby tree_sitter gem (legacy fallback)
   def detect_treesitter(language)
     return false unless SUPPORTED_LANGUAGES.include?(language)
 
+    # Crystal binary is the preferred tree-sitter backend since it uses
+    # tree-sitter Query API with language-specific S-expression patterns
+    # and supports non-blocking concurrent file processing.
+    return true if detect_crystal_discovery_binary
+
+    # Fallback: Ruby tree_sitter gem
     begin
       require 'tree_sitter'
-      # Common ruby gem names for language grammars.
       possible = [
         "tree_sitter/#{language}",
         "tree_sitter_#{language}",
@@ -45,6 +53,25 @@ module ParityInventory
     end
   end
 
+  # Detect the Crystal discovery binary (chiasmus-discover or equivalent).
+  # Returns binary invocation string or nil.
+  def detect_crystal_discovery_binary
+    @detect_crystal_discovery_binary ||= begin
+      # Check for compiled binary first
+      candidates = [
+        File.join(__dir__, '..', 'bin', 'chiasmus-discover'),
+        File.join(__dir__, '..', 'bin', 'chiasmus_discover'),
+      ]
+      found = candidates.find { |p| File.executable?(p) }
+      unless found
+        # Try crystal run as fallback
+        src = File.join(__dir__, '..', 'src', 'chiasmus_discover.cr')
+        found = "crystal run #{src} --" if File.exist?(src)
+      end
+      found
+    end
+  end
+
   def discover_items(root_dir:, source_path:, language:, parser_mode: 'auto')
     raise ArgumentError, "Unsupported language: #{language}" unless SUPPORTED_LANGUAGES.include?(language)
 
@@ -57,13 +84,58 @@ module ParityInventory
     end
 
     items = if parser == 'tree-sitter'
-              # Placeholder: parser selection logic is ready; regex extraction remains canonical for now.
-              discover_with_regex(base, language)
+              result = discover_with_crystal_discovery(base, language)
+              unless result.empty?
+                result.each { |item| item[:parser_mode] = 'tree-sitter' }
+              end
+              result
             else
               discover_with_regex(base, language)
             end
 
     [base, dedupe_items(items)]
+  end
+
+  # Delegate to Crystal discovery binary for tree-sitter-backed parsing.
+  # Falls back to regex if binary unavailable or fails.
+  def discover_with_crystal_discovery(base, language)
+    discover_bin = detect_crystal_discovery_binary
+    unless discover_bin
+      warn "Crystal discovery binary not found; falling back to regex"
+      return discover_with_regex(base, language)
+    end
+
+    begin
+      output = IO.popen([discover_bin, '--language', language, '--dir', base.to_s, '--parser', 'tree-sitter'], &:read)
+      items = []
+      output.each_line do |line|
+        next if line.start_with?('#') || line.strip.empty?
+        cols = line.split("\t", -1)
+        next unless cols.length >= 2
+
+        source_id = cols[0].strip
+        kind = cols[1].strip
+        parts = source_id.split('::', 3)
+        next unless parts.length >= 3
+
+        file = parts[0]
+        item_kind = parts[1]
+        name = parts[2]
+        scope = item_kind == 'test' ? 'test' : 'source'
+
+        items << Item.new(
+          id: source_id,
+          kind: kind,
+          scope: scope,
+          file: file,
+          name: name
+        )
+      end
+      items
+    rescue => e
+      warn "Crystal discovery failed: #{e.message}; falling back to regex"
+      discover_with_regex(base, language)
+    end
   end
 
   def effective_parser(language, parser_mode)
@@ -92,13 +164,20 @@ module ParityInventory
     test_items = []
 
     entries.each do |path, rel|
-      content = File.read(path)
+      begin
+        content = File.read(path, encoding: 'UTF-8')
+      rescue Encoding::InvalidByteSequenceError, ArgumentError => e
+        # Skip binary or invalid encoding files (like AppleDouble ._ files)
+        warn "Skipping file with encoding issues: #{rel} (#{e.message})"
+        next
+      end
       src, test = case language
                   when 'go' then extract_go(rel, content)
                   when 'rust' then extract_rust(rel, content)
                   when 'crystal' then extract_crystal(rel, content)
                   when 'java' then extract_java(rel, content)
                   when 'ruby' then extract_ruby(rel, content)
+                  when 'typescript' then extract_typescript(rel, content)
                   else [[], []]
                   end
       source_items.concat(src) unless test_file_for_language?(language, rel)
@@ -110,7 +189,10 @@ module ParityInventory
 
   def files_for_language(base, language)
     files = Dir.glob('**/*', File::FNM_DOTMATCH, base: base.to_s)
-               .reject { |f| f.start_with?('.') || f.include?('/.git/') || f.end_with?('/.git') }
+               .reject do |f|
+      f.start_with?('.',
+                    '._') || f.include?('/.git/') || f.end_with?('/.git') || f.include?('/._')
+    end
 
     selected = files.select do |rel|
       full = base + rel
@@ -127,6 +209,8 @@ module ParityInventory
         rel.end_with?('.java')
       when 'ruby'
         rel.end_with?('.rb')
+      when 'typescript'
+        rel.end_with?('.ts', '.js')
       else
         false
       end
@@ -153,6 +237,8 @@ module ParityInventory
       rel.include?('/test/') || rel.end_with?('Test.java')
     when 'ruby'
       rel.end_with?('_spec.rb', '_test.rb') || rel.start_with?('spec/') || rel.start_with?('test/')
+    when 'typescript'
+      rel.end_with?('.test.ts', '.spec.ts', '.test.js', '.spec.js') || rel.include?('/test/') || rel.include?('/tests/')
     else
       false
     end
@@ -232,9 +318,7 @@ module ParityInventory
       if (m = stripped.match(/^pub\s+type\s+([A-Z][A-Za-z0-9_]*)\b/))
         source << emit_source(rel, 'type', m[1])
       end
-      if (m = stripped.match(/^pub\s+fn\s+([a-zA-Z_][A-Za-z0-9_]*)\b/)) && line.match?(/^pub\s+fn\s+#{Regexp.escape(m[1])}[^(]*\(/)
-        # Check if this is actually a function declaration (has parentheses after potential generics)
-        # Look ahead for opening parenthesis after the function name and optional generics
+      if (m = stripped.match(/^pub\s+fn\s+([a-zA-Z_][A-Za-z0-9_]*)\s*\(/))
         source << emit_source(rel, 'func', m[1])
       end
 
@@ -388,6 +472,87 @@ module ParityInventory
       if (m = stripped.match(/^test\s+["'](.+?)["']/))
         tests << emit_test(rel, m[1])
       end
+    end
+
+    [source, tests]
+  end
+  def extract_typescript(rel, text)
+    source = []
+    tests = []
+
+    namespace = []
+    in_interface = false
+    in_type_alias = false
+
+    text.each_line do |line|
+      stripped = line.strip
+
+      # Handle export keyword
+      stripped = stripped.sub('export ', '').strip if stripped.start_with?('export ')
+
+      # Class definitions
+      if (m = stripped.match(/^(abstract\s+)?class\s+([A-Z][A-Za-z0-9_$]*)/))
+        source << emit_source(rel, 'class', m[2])
+        namespace << m[2]
+        next
+      end
+
+      # Interface definitions
+      if (m = stripped.match(/^interface\s+([A-Z][A-Za-z0-9_$]*)/))
+        source << emit_source(rel, 'interface', m[1])
+        in_interface = true
+        next
+      end
+
+      # Type alias definitions
+      if (m = stripped.match(/^type\s+([A-Z][A-Za-z0-9_$]*)\s*=/))
+        source << emit_source(rel, 'type', m[1])
+        in_type_alias = true
+        next
+      end
+
+      # Function definitions
+      if (m = stripped.match(/^function\s+([a-z_][A-Za-z0-9_$]*)/))
+        source << emit_source(rel, 'function', m[1])
+        next
+      end
+
+      # Method definitions in classes
+      # Check if this looks like a method (not a function call)
+      if (m = stripped.match(/^([a-z_][A-Za-z0-9_$]*)\s*\(/)) && !namespace.empty? && !stripped.start_with?('if ', 'for ',
+                                                                                                            'while ', 'switch ', 'return ', 'throw ')
+        source << emit_source(rel, 'method', "#{namespace.last}.#{m[1]}")
+      end
+
+      # Arrow functions (const/let/var assignments)
+      if (m = stripped.match(/^(const|let|var)\s+([a-z_][A-Za-z0-9_$]*)\s*=\s*(async\s*)?\(/))
+        source << emit_source(rel, 'function', m[2])
+      end
+
+      # Constant declarations
+      if (m = stripped.match(/^(const|let|var)\s+([A-Z][A-Z0-9_$]*)\s*=/))
+        source << emit_source(rel, 'const', m[2])
+      end
+
+      # Test functions (describe, it, test)
+      if (m = stripped.match(/^describe\s*\(\s*["'](.+?)["']/))
+        tests << emit_test(rel, m[1])
+      end
+      if (m = stripped.match(/^it\s*\(\s*["'](.+?)["']/))
+        tests << emit_test(rel, m[1])
+      end
+      if (m = stripped.match(/^test\s*\(\s*["'](.+?)["']/))
+        tests << emit_test(rel, m[1])
+      end
+
+      # End of interface or type alias
+      if stripped == '}' && (in_interface || in_type_alias)
+        in_interface = false
+        in_type_alias = false
+      end
+
+      # End of class
+      namespace.pop if stripped == '}' && !namespace.empty?
     end
 
     [source, tests]
