@@ -85,11 +85,20 @@ module Bidi
     def self.reorder_map_from_visual_runs(info : BidiInfo, para_info : ParagraphInfo) : Array(Int32)
       levels, runs = info.visual_runs(para_info, para_info.range)
 
-      # Create character index map (byte index -> logical character index)
+      # Build byte-index → character-index map using byte-level iteration
       char_index_map = {} of Int32 => Int32
-      info.text.each_char_with_index do |_char, logical|
-        byte_start = info.text.byte_index_to_char_index(logical).not_nil!
-        char_index_map[byte_start] = logical
+      logical = 0
+      byte_pos = 0
+      while byte_pos < info.text.bytesize
+        char_idx = info.text.byte_index_to_char_index(byte_pos)
+        if char_idx
+          ch = info.text[char_idx]
+          char_index_map[byte_pos] = logical
+          logical += 1
+          byte_pos += ch.bytesize
+        else
+          byte_pos += 1
+        end
       end
 
       map = [] of Int32
@@ -181,7 +190,7 @@ describe "Bidi Algorithm Full Conformance" do
 
         # Check levels
         para_info = bidi_info.paragraphs[0]
-        levels = bidi_info.reordered_levels(para_info, para_info.range)
+        levels = bidi_info.reordered_levels_per_char(para_info, para_info.range)
 
         reorder_map = Bidi::BidiInfo.reorder_visual(levels)
         visual_runs_map = Bidi::ConformanceHelpers.reorder_map_from_visual_runs(bidi_info, para_info)
@@ -194,7 +203,7 @@ describe "Bidi Algorithm Full Conformance" do
         # Verify UTF-16 API returns same levels
         bidi_info16 = Bidi::UTF16::BidiInfo.new(input_string16, input_base_level)
         para_info16 = bidi_info16.paragraphs[0]
-        levels16 = bidi_info16.reordered_levels(para_info16, para_info16.range)
+        levels16 = bidi_info16.reordered_levels_per_char(para_info16, para_info16.range)
 
         if levels != levels16
           raise "UTF-8 and UTF-16 APIs must return the same per-char levels, for line: #{line}"
@@ -280,7 +289,7 @@ describe "Bidi Algorithm Full Conformance" do
 
       # Check levels
       para_info = bidi_info.paragraphs[0]
-      levels = bidi_info.reordered_levels(para_info, para_info.range)
+      levels = bidi_info.reordered_levels_per_char(para_info, para_info.range)
 
       reorder_map = Bidi::BidiInfo.reorder_visual(levels)
       visual_runs_map = Bidi::ConformanceHelpers.reorder_map_from_visual_runs(bidi_info, para_info)

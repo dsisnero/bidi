@@ -185,9 +185,12 @@ module Bidi
         processing_classes[abs_byte_index + j] = processing_classes[abs_byte_index]
       end
 
-      # Track level runs (BD7) - use absolute indices for runs
-      if rel_byte_index == 0 || levels[abs_byte_index] != current_run_level
-        if rel_byte_index > 0
+      # Track level runs (BD7) - match Rust: only split at non-removed chars
+      # <http://www.unicode.org/reports/tr9/#BD7>
+      if rel_byte_index == 0
+        current_run_level = levels[abs_byte_index]
+      elsif !original_classes[abs_byte_index].removed_by_x9? && levels[abs_byte_index] != current_run_level
+        if current_run_start < rel_byte_index
           runs << LevelRun.new(start + current_run_start, start + rel_byte_index - 1)
         end
         current_run_level = levels[abs_byte_index]
@@ -197,13 +200,9 @@ module Bidi
       prev_byte_index = rel_byte_index
     end
 
-    # Add final run
-    if current_run_start <= actual_size - 1
-      # Rust uses levels.len() which is text.bytesize
-      # We need to include all bytes up to the end
-      final_run = LevelRun.new(start + current_run_start, start + actual_size - 1)
-
-      runs << final_run
+    # Add final run (inclusive end, matching existing pipeline convention)
+    if current_run_start < actual_size
+      runs << LevelRun.new(start + current_run_start, start + actual_size - 1)
     end
   end
 end
