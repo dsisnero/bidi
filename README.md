@@ -1,158 +1,110 @@
-<p align="center">
-  <strong>Crystal port of Rust unicode-bidi crate</strong><br>
-  Unicode Bidirectional Algorithm implementation for mixed RTL/LTR text display
-</p>
+# bidi
 
-<p align="center">
-  <a href="docs/">Documentation</a> &middot;
-  <a href="docs/api/">API Reference</a> &middot;
-  <a href="docs/architecture.md">Architecture</a> &middot;
-  <a href="docs/development.md">Development</a>
-</p>
+Crystal port of the [Rust `unicode-bidi` crate](https://github.com/servo/unicode-bidi) (v0.3.18) — Unicode Bidirectional Algorithm implementation for mixed RTL/LTR text display.
 
-<p align="center">
-  <a href="https://github.com/dsisnero/bidi/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/dsisnero/bidi/ci.yml?style=flat-square" alt="Build Status">
-  </a>
-  <a href="https://github.com/dsisnero/bidi/releases">
-    <img src="https://img.shields.io/github/v/release/dsisnero/bidi?style=flat-square" alt="Release">
-  </a>
-  <a href="https://github.com/dsisnero/bidi/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/dsisnero/bidi?style=flat-square" alt="License">
-  </a>
-  <a href="https://github.com/dsisnero/bidi">
-    <img src="https://img.shields.io/github/stars/dsisnero/bidi?style=flat-square" alt="Stars">
-  </a>
-</p>
-
----
-
-Acts as a translator ensuring right-to-left and left-to-right scripts coexist harmoniously on screen, implementing the Unicode Bidirectional Algorithm to properly display mixed-direction text.
+[![Build Status](https://img.shields.io/github/actions/workflow/status/dsisnero/bidi/ci.yml?style=flat-square)](https://github.com/dsisnero/bidi/actions)
+[![License](https://img.shields.io/github/license/dsisnero/bidi?style=flat-square)](LICENSE)
 
 ---
 
 ## Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/dsisnero/bidi.git
 cd bidi
-
-# Initialize submodules
 git submodule update --init
-
-# Install dependencies
 make install
-
-# Run tests
 make test
-
-# Run Rust API compatibility tests
-crystal spec spec/rust_api_spec.cr
 ```
 
-## Example Usage
+## Example
 
 ```crystal
 require "bidi"
 
-# Basic text analysis
 text = "Hello שלום"  # Mixed LTR/RTL text
 info = Bidi::BidiInfo.new(text, nil)
 
-# Get paragraph information
 para = info.paragraphs[0]
-puts "Paragraph level: #{para.level}"  # LTR or RTL
+reordered = info.reorder_line(para, para.range)
+puts reordered  # "Hello םולש"
 
-# Reorder line for display
-line = para.range
-reordered = info.reorder_line(para, line)
-puts "Display order: #{reordered}"  # "Hello םולש"
+# Single paragraph API
+info = Bidi::ParagraphBidiInfo.new(text, nil)
+puts info.reorder_line(0...text.bytesize)
 
-# Single paragraph API (simpler)
-para_info = Bidi::ParagraphBidiInfo.new(text, nil)
-reordered = para_info.reorder_line(0...text.bytesize)
-puts "Display order: #{reordered}"  # "Hello םולש"
-
-# UTF-16 support
-utf16_text = text.codepoints.map(&.to_u16)
-utf16_info = Bidi::UTF16::BidiInfo.new(utf16_text, nil)
-reordered_utf16 = utf16_info.reorder_line(utf16_info.paragraphs[0], 0...utf16_text.size)
-# Returns Array(UInt16) in visual order
+# Base direction detection
+puts Bidi.get_base_direction("Hello")  # Ltr
+puts Bidi.get_base_direction("שלום")   # Rtl
 ```
 
-## Features
+## API
 
-- **Unicode Bidirectional Algorithm**: Full implementation of UBA as defined in Unicode Technical Report #9
-- **Rust parity**: Behavior-identical port of the Rust `unicode-bidi` crate v0.3.18
-- **Complete API Coverage**: All public APIs from Rust crate implemented with exact behavioral parity
-- **UTF-8 and UTF-16 Support**: Full support for both UTF-8 (`String`) and UTF-16 (`Array(UInt16)`) text
-- **Crystal-native API**: Clean Crystal interface with proper type mappings
-- **Comprehensive testing**: 86 original tests + 19 Rust API compatibility tests (18 passing, 1 pending)
-- **Inventory tracking**: Systematic parity tracking with manifest files
+| Rust API | Crystal | Status |
+|----------|---------|--------|
+| `BidiInfo` | `Bidi::BidiInfo` | ✅ |
+| `ParagraphBidiInfo` | `Bidi::ParagraphBidiInfo` | ✅ |
+| `UTF16::BidiInfo` | `Bidi::UTF16::BidiInfo` | ✅ |
+| `UTF16::ParagraphBidiInfo` | `Bidi::UTF16::ParagraphBidiInfo` | ✅ |
+| `Level` | `Bidi::Level` | ✅ |
+| `BidiClass` | `Bidi::BidiClass` | ✅ |
+| `Direction` | `Bidi::Direction` | ✅ |
+| `get_base_direction` | `Bidi.get_base_direction` | ✅ |
+| `reorder_visual` | `Bidi::BidiInfo.reorder_visual` | ✅ |
+
+## Source Map
+
+| Rust (`vendor/unicode-bidi/src/`) | Crystal (`src/bidi/`) |
+|-----------------------------------|----------------------|
+| `char_data/mod.rs`, `tables.rs` | `char_data.cr`, `char_data/tables.cr`, `char_data/tables_data.cr` |
+| `level.rs` | `level.cr` |
+| `format_chars.rs` | `format_chars.cr` |
+| `data_source.rs` | `data_source.cr` |
+| `explicit.rs` | `explicit.cr` |
+| `prepare.rs` | `prepare.cr` |
+| `implicit.rs` | `implicit.cr` |
+| `lib.rs` | `info.cr`, `bidi_info_common.cr` |
+| `utf16.rs` | `utf16.cr` |
+| `deprecated.rs` | (not ported) |
 
 ## Development
 
 ```bash
-make install    # Install dependencies
-make update     # Update dependencies
-make format     # Format code
+make install    # Install dependencies (shards install)
+make update     # Update dependencies (shards update)
+make format     # Format code (crystal tool format)
 make lint       # Lint code (format check + ameba)
-make test       # Run tests
+make test       # Run tests (crystal spec)
 make clean      # Clean build artifacts
 ```
 
-See [Development Guide](docs/development.md) for full setup instructions.
-
 ## Documentation
 
-Complete documentation is available at [https://dsisnero.github.io/bidi/](https://dsisnero.github.io/bidi/)
+| Document | Purpose |
+|----------|---------|
+| [Architecture](docs/architecture.md) | System design, data flow, type mappings |
+| [Development](docs/development.md) | Setup, workflow, debugging |
+| [Coding Guidelines](docs/coding-guidelines.md) | Code style, error handling, naming |
+| [Testing](docs/testing.md) | Test commands, spec file layout |
+| [Examples](docs/examples.md) | Usage examples for common scenarios |
+| [PR Workflow](docs/pr-workflow.md) | Commits, PRs, review process |
+| [Parity Tracker](plans/parity.md) | Port status, feature checklist, work plan |
 
-### Quick Links
-- [📚 Full Documentation](docs/) - Guides and tutorials
-- [🔧 API Reference](docs/api/) - Complete API documentation
-- [🏗️ Architecture](docs/architecture.md) - System design and implementation
-- [⚙️ Development](docs/development.md) - Setup and workflow
-- [🧪 Testing](docs/testing.md) - Test commands and patterns
-- [🤝 Contributing](docs/pr-workflow.md) - Contribution guidelines
+## Test Status
 
-## Contributing
-
-1. Create an issue: `/forge-create-issue`
-2. Implement: `/forge-implement-issue <number>`
-3. Self-review: `/forge-reflect-pr`
-4. Address feedback: `/forge-address-pr-feedback`
-5. Update changelog: `/forge-update-changelog`
-
-## Status
-
-✅ **Complete**: All public APIs from Rust `unicode-bidi` v0.3.18 are implemented with behavioral parity
-
-### API Coverage
-
-| Rust API | Crystal Implementation | Status |
-|----------|----------------------|--------|
-| `BidiInfo` | `Bidi::BidiInfo` | ✅ Complete |
-| `ParagraphBidiInfo` | `Bidi::ParagraphBidiInfo` | ✅ Complete |
-| `UTF16::BidiInfo` | `Bidi::UTF16::BidiInfo` | ✅ Complete |
-| `UTF16::ParagraphBidiInfo` | `Bidi::UTF16::ParagraphBidiInfo` | ✅ Complete |
-| `Level` | `Bidi::Level` | ✅ Complete |
-| `BidiClass` | `Bidi::BidiClass` | ✅ Complete |
-| `Direction` | `Bidi::Direction` | ✅ Complete |
-| `get_base_direction` | `Bidi.get_base_direction` | ✅ Complete |
-| `reorder_visual` | `Bidi::BidiInfo.reorder_visual` | ✅ Complete |
-
-### Test Status
-- **Original Tests**: 86/86 passing
-- **Rust API Compatibility Tests**: 18/19 passing (1 pending for `ParagraphBidiInfo.reordered_levels` verification)
+| Suite | Count | Pass | Fail | Errors | Pending |
+|-------|-------|------|------|--------|---------|
+| Full spec | 123 | 123 | 0 | 0 | 0 |
+| Unit tests (`make test`) | 92 | 92 | 0 | 0 | 0 |
+| Rust upstream tests | 42 | 42 | 0 | 0 | 0 |
+| Parity manifest checks | 3 | 3 | 0 | — | — |
 
 ## Upstream
 
-- **Source**: https://github.com/servo/unicode-bidi.git
-- **Version**: v0.3.18 (commit 580b9c6)
-- **Documentation**: https://docs.rs/unicode-bidi
-- **Crystal API Documentation**: See `docs/` directory for detailed architecture and usage
+- **Source**: [servo/unicode-bidi](https://github.com/servo/unicode-bidi) (v0.3.18)
+- **Vendor**: `vendor/unicode-bidi/` (git submodule)
+- **Docs**: [docs.rs/unicode-bidi](https://docs.rs/unicode-bidi)
 
 ## License
 
-MIT - See [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).

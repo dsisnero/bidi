@@ -2,108 +2,95 @@
 
 ## Overview
 
-This is a Crystal port of the Rust `unicode-bidi` crate, which implements the Unicode Bidirectional Algorithm (UBA) as defined in [Unicode Technical Report #9](https://www.unicode.org/reports/tr9/).
+This Crystal port of [Rust `unicode-bidi`](https://github.com/servo/unicode-bidi) v0.3.18 implements the Unicode Bidirectional Algorithm per [UAX #9](https://www.unicode.org/reports/tr9/). Every public API and internal pipeline stage is preserved identically.
 
-## Source Structure
+## Source Layout
 
-- `vendor/unicode-bidi/` - Upstream Rust source (git submodule)
-- `src/` - Crystal implementation
-- `spec/` - Crystal tests/specs
-- `plans/inventory/` - Parity tracking manifests
+```
+vendor/unicode-bidi/src/          →   src/bidi/
+  char_data/mod.rs    (char data)       char_data.cr + char_data/tables.cr + char_data/tables_data.cr
+  level.rs            (Level struct)    level.cr
+  format_chars.rs     (constants)       format_chars.cr
+  data_source.rs      (trait + struct)  data_source.cr
+  explicit.rs         (X1-X8)           explicit.cr
+  prepare.rs          (X9-X10, BD7)     prepare.cr
+  implicit.rs         (W1-W7,N0-N2,I1-2) implicit.cr
+  lib.rs              (BidiInfo API)    info.cr + bidi_info_common.cr
+  utf16.rs            (UTF-16 support)  utf16.cr
+  deprecated.rs       (legacy)          (not ported)
+```
 
-## Key Components
+## Pipeline
 
-### From Upstream (Rust `unicode-bidi` v0.3.18)
+### UTF-8 Processing (`src/bidi/info.cr`)
 
-The Rust crate provides:
-- `BidiClass` enumeration for Unicode bidi classes
-- `BidiInfo` struct for paragraph-level analysis
-- `ParagraphBidiInfo` struct for single-paragraph analysis
-- `Level` type for embedding levels (0-125, even=LTR, odd=RTL)
-- `Direction` enum (Ltr, Rtl, Mixed)
-- UTF-16 variants: `BidiInfo` and `ParagraphBidiInfo` for `Vec<u16>` text
-- Reordering and visual runs computation
-- Base direction detection
+1. **`InitialInfoExt.new_with_data_source`** — scans characters, assigns `BidiClass`, splits paragraphs at B/S class chars, auto-detects paragraph level from first strong char (P2-P3)
+2. **`compute_explicit`** (`explicit.cr`) — applies X1-X8 (explicit embedding/override/isolate), produces level runs (BD7)
+3. **`isolating_run_sequences`** (`prepare.cr`) — groups level runs into isolating run sequences (X9-X10)
+4. **`resolve_weak`** (`implicit.cr`) — applies W1-W7 (weak types)
+5. **`resolve_neutral`** (`implicit.cr`) — applies N0-N2 (neutral types, bracket pairs)
+6. **`resolve_levels`** (`implicit.cr`) — applies I1-I2 (implicit levels)
+7. **`assign_levels_to_removed_chars`** — fills levels for X9-removed formatting chars
+8. **`reorder_levels` (L1)** — resets trailing whitespace/formatting to paragraph level
+9. **`visual_runs` (L2)** — reverses runs at odd levels for visual order
+10. **`reorder_line`** — produces display-order string by concatenating reversed RTL runs
 
-### Crystal Port (Complete Implementation)
+### UTF-16 Processing (`src/bidi/utf16.cr`)
 
-The Crystal port mirrors the Rust API with exact behavioral parity:
+Same pipeline but operates on `Array(UInt16)` code units with surrogate pair handling:
+- High surrogate (0xD800–0xDBFF) + low surrogate (0xDC00–0xDFFF) → single character
+- Unpaired surrogates → U+FFFD replacement character
+- `char_at` returns nil for mid-surrogate positions (not a character boundary)
 
-#### Core Types
-- `Bidi::BidiClass` - Unicode bidi classes (L, R, AL, EN, ES, ET, AN, CS, NSM, BN, B, S, WS, ON, LRI, RLI, FSI, PDI, LRE, RLE, LRO, RLO, PDF)
-- `Bidi::Level` - Embedding levels (0-125, even=LTR, odd=RTL)
-- `Bidi::Direction` - Paragraph direction (Ltr, Rtl, Mixed)
+## Core Types
 
-#### Main APIs
-- `Bidi::BidiInfo` - Multi-paragraph analysis for UTF-8 text
-- `Bidi::ParagraphBidiInfo` - Single-paragraph analysis for UTF-8 text
-- `Bidi::UTF16::BidiInfo` - Multi-paragraph analysis for UTF-16 text
-- `Bidi::UTF16::ParagraphBidiInfo` - Single-paragraph analysis for UTF-16 text
+| Rust | Crystal | File |
+|------|---------|------|
+| `BidiClass` enum (23 variants) | `Bidi::BidiClass` | `char_data/tables.cr:8` |
+| `Level(u8)` struct (0–125) | `Bidi::Level` | `level.cr:23` |
+| `Direction` enum (Ltr, Rtl, Mixed) | `Bidi::Direction` | `info.cr:26` |
+| `BidiInfo<'text>` | `Bidi::BidiInfo` | `info.cr:204` |
+| `ParagraphBidiInfo<'text>` | `Bidi::ParagraphBidiInfo` | `info.cr:595` |
+| `ParagraphInfo` | `Bidi::ParagraphInfo` | `info.cr:37` |
+| `IsolatingRunSequence` | `Bidi::IsolatingRunSequence` | `prepare.cr:13` |
+| `HardcodedBidiData` | `HardcodedBidiData` | `char_data.cr:6` |
 
-#### Key Methods
-- `new(text, default_para_level)` - Analyze text with optional base direction
-- `reorder_line(line_range)` - Reorder text for visual display
-- `visual_runs(line_range)` - Get visual runs with levels
-- `reordered_levels(line_range)` - Get levels after applying L1-L2 rules
-- `has_rtl?` / `has_ltr?` - Check text directionality
-- `direction` - Get paragraph direction
-- `Bidi.get_base_direction(text)` - Detect base direction from text
+## Type Mappings
 
-#### Type Mappings
-- Rust `enum` → Crystal `enum`
-- Rust `struct` → Crystal `struct`
-- Rust `Vec<T>` → Crystal `Array(T)`
-- Rust `&str` → Crystal `String`
-- Rust `Vec<u16>` → Crystal `Array(UInt16)`
-- Rust `Range<usize>` → Crystal `Range(Int32, Int32)`
+| Rust | Crystal |
+|------|---------|
+| `enum` | `enum` |
+| `struct` | `struct` |
+| `Vec<T>` | `Array(T)` |
+| `&str` | `String` |
+| `Vec<u16>` | `Array(UInt16)` |
+| `Range<usize>` | `Range(Int32, Int32)` |
+| `Option<T>` | `T?` |
+| `trait` | module/abstract struct |
 
-## Data Flow
+## Key Design Decisions
 
-### UTF-8 Processing
-1. **Input**: `String` text with optional `Level` base direction
-2. **Character Analysis**: Determine `BidiClass` for each character using hardcoded Unicode data
-3. **Paragraph Segmentation**: Split text by paragraph separators (B, S classes)
-4. **Explicit Level Resolution**: Apply rules X1-X9 for explicit formatting characters
-5. **Implicit Level Resolution**: Apply rules W1-W7, N1-N2 for weak and neutral characters
-6. **L1-L2 Rules**: Reset whitespace to paragraph level, reorder runs for visual display
-7. **Output**: Reordered text or visual runs for display
+1. **Byte-indexed arrays**: `original_classes` and `levels` are indexed by byte position (UTF-8) or code unit position (UTF-16), matching Rust
+2. **`byte_slice` for substrings**: avoids mid-character slicing on multi-byte UTF-8
+3. **Inclusive-end level runs**: internal run representation uses inclusive end indices; iterated correctly via `Range#each`
+4. **`byte_index_to_char_index` bridge**: Crystal's `String#[]?` uses character indices, so byte positions must be converted before character access
+5. **Empty text**: returns `Ltr` direction with empty levels/paragraphs (matching Rust)
 
-### UTF-16 Processing
-Same as UTF-8 but operates on `Array(UInt16)` with surrogate pair handling:
-- Surrogate pairs (high: 0xD800-0xDBFF, low: 0xDC00-0xDFFF) treated as single characters
-- Invalid sequences replaced with U+FFFD (REPLACEMENT CHARACTER)
+## Testing
 
-## Implementation Details
-
-### Critical Design Decisions
-1. **Byte vs Character Indexing**: All APIs use byte indices for UTF-8, code unit indices for UTF-16
-2. **String Slicing**: Uses `byte_slice` for UTF-8 to handle multi-byte characters correctly
-3. **Surrogate Pair Handling**: UTF-16 implementation preserves surrogate pairs when reversing text
-4. **Empty Text Handling**: `get_base_direction("")` returns `Ltr` (matching Rust behavior)
-5. **Level Comparison**: `Level` struct implements comparison operators based on underlying `UInt8` value
-
-### Performance Considerations
-- Unicode data is hardcoded (from upstream) for fast lookups
-- Level runs are computed incrementally
-- String operations optimized with `byte_slice` to avoid character iteration
-- UTF-16 surrogate pair detection uses range checks for speed
+| Spec file | Covers |
+|-----------|--------|
+| `spec/level_spec.cr` | `Level` construction, raise/lower, is_ltr/is_rtl |
+| `spec/bidi_spec.cr` | `BidiClass` lookups, `BidiInfo` construction |
+| `spec/info_spec.cr` | `BidiInfo`, `ParagraphBidiInfo`, direction, reorder_line, has_rtl |
+| `spec/prepare_spec.cr` | Level runs, isolating run sequences, sos/eos |
+| `spec/utf16_spec.cr` | `UTF16::BidiInfo`, char iterator, surrogate handling |
+| `spec/rust_api_spec.cr` | Rust API compatibility (reorder_line, visual_runs, ParagraphBidiInfo) |
+| `spec/integration_spec.cr` | Multi-paragraph, bracket pairs, embedding controls |
+| `spec/conformance_full_spec.cr` | Full `BidiTest.txt` and `BidiCharacterTest.txt` validation |
 
 ## Dependencies
 
-- Crystal standard library
-- Unicode data (embedded from upstream `vendor/unicode-bidi` crate)
-- Development: `ameba` for linting
-
-## Testing Strategy
-
-1. **Original Test Suite**: 86 tests covering core functionality
-2. **Rust API Compatibility Tests**: 19 tests ported from Rust's public API tests
-3. **UTF-16 Specific Tests**: Edge cases for surrogate pairs and invalid sequences
-4. **Parity Verification**: Regular comparison with Rust test outputs
-
-## Error Handling
-
-- Invalid UTF-16 sequences replaced with U+FFFD
-- Level values validated (0-125 range)
-- Range bounds checked in public APIs
-- Returns empty results for empty input ranges
+- Crystal stdlib only (no external shards)
+- Unicode data embedded from upstream `vendor/unicode-bidi/src/char_data/tables.rs`
+- Dev: `ameba` for linting

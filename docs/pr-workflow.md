@@ -2,51 +2,64 @@
 
 ## Before Starting
 
-1. **Check inventory status**:
-   ```bash
-   ./scripts/check_port_inventory.sh . plans/inventory/rust_port_inventory.tsv vendor/unicode-bidi rust
-   ```
+Check parity status:
 
-2. **Update inventory** if working on new items.
+```bash
+./scripts/check_port_inventory.sh . plans/inventory/rust_port_inventory.tsv vendor/unicode-bidi rust
+./scripts/check_source_parity.sh . plans/inventory/rust_source_parity.tsv vendor/unicode-bidi rust
+./scripts/check_test_parity.sh . plans/inventory/rust_test_parity.tsv vendor/unicode-bidi rust
+```
+
+## Branch Naming
+
+```
+feat/port-<feature-name>
+fix/<what-is-fixed>
+test/port-<test-name>
+refactor/<what-is-refactored>
+docs/<what-is-documented>
+```
 
 ## Development Process
 
-### 1. Create Feature Branch
+### 1. Implement
+
+- Port Rust code to Crystal in `src/bidi/`
+- Match upstream behavior exactly (algorithm, edge cases, error conditions)
+- Follow [Coding Guidelines](coding-guidelines.md)
+
+### 2. Test
 
 ```bash
-git checkout -b feature/port-bidi-class
+make test              # Unit tests (92 examples)
+crystal spec           # Full suite (123 examples)
 ```
 
-### 2. Implement Changes
-
-- Port Rust code to Crystal
-- Add/update Crystal specs
-- Update inventory status
-
-### 3. Run Quality Gates
+### 3. Quality Gates
 
 ```bash
-make format
-make lint
-make test
+make format            # crystal tool format
+make lint              # format check + ameba
+make test              # unit specs
+./scripts/verify_parity_adversarial.sh . vendor/unicode-bidi rust 'crystal spec' 'cargo test'
 ```
 
-### 4. Update Documentation
+### 4. Update Manifests
 
-- Update README if API changes
-- Add/update code comments
-- Update inventory notes
+After porting items, update `plans/inventory/rust_port_inventory.tsv`:
+- Set status to `ported` or `partial`
+- Fill `crystal_refs` with file:line references
+- Add notes for any intentional divergences
 
-### 5. Commit Changes
+### 5. Commit
 
-Use descriptive commit messages:
-```
-Port BidiClass enum and related functions
+```bash
+git add -A
+git commit -m "feat(bidi): port <feature>
 
-- Add BidiClass enum with all Unicode bidi classes
-- Port bidi_class() lookup function
-- Add unit tests from upstream
-- Update inventory status for 5 items
+- <change 1>
+- <change 2>
+- Update inventory status for N items"
 ```
 
 ## PR Checklist
@@ -55,25 +68,22 @@ Port BidiClass enum and related functions
 - [ ] `make format` passes
 - [ ] `make lint` passes
 - [ ] `make test` passes
-- [ ] No new warnings
+- [ ] `crystal spec` passes (123 examples, 0 failures)
+- [ ] `./scripts/verify_parity_adversarial.sh` passes
 
 ### Porting Completeness
 - [ ] Behavior matches upstream exactly
-- [ ] All relevant tests ported
-- [ ] Inventory status updated
-- [ ] `crystal_refs` filled for ported items
+- [ ] All relevant Rust tests ported
+- [ ] `crystal_refs` filled in inventory for ported items
+- [ ] No new `[ ]` items in `plans/parity.md`
 
 ### Documentation
-- [ ] Code comments added/updated
-- [ ] README updated if needed
-- [ ] Inventory notes clear
+- [ ] Code comments match upstream where applicable
+- [ ] README.md updated if API surface changes
+- [ ] Docs updated if pipeline or conventions change
+- [ ] Inventory notes are clear
 
-### Review Ready
-- [ ] PR description explains changes
-- [ ] Linked to inventory items
-- [ ] Ready for review
-
-## PR Description Template
+## PR Template
 
 ```markdown
 ## Summary
@@ -82,31 +92,16 @@ Port [feature] from Rust unicode-bidi v0.3.18.
 
 ## Changes
 
-- [List specific changes]
+- [list specific code changes with file:line references]
 
 ## Inventory Updates
 
-- Updated `rust_port_inventory.tsv`:
-  - [List specific items with status changes]
+Updated `rust_port_inventory.tsv`:
+- [list items with old status → new status]
 
 ## Testing
 
-- [Describe tests added/ported]
-- [Test results]
-
-## Notes
-
-[Any deviations from upstream or special considerations]
+- [describe tests ported/added]
+- `make test`: 92 examples, 0 failures
+- `crystal spec`: 123 examples, 0 failures
 ```
-
-## After PR Merge
-
-1. **Sync submodule** if upstream changed:
-   ```bash
-   git submodule update --remote vendor/unicode-bidi
-   ```
-
-2. **Regenerate manifests** if needed:
-   ```bash
-   ./scripts/ensure_parity_plan.sh . vendor/unicode-bidi rust auto 1
-   ```

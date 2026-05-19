@@ -1,93 +1,105 @@
 # Development Guide
 
-## Getting Started
+## Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/dsisnero/bidi.git
 cd bidi
-
-# Initialize submodules
 git submodule update --init
-
-# Install dependencies
 make install
 ```
 
-## Porting Workflow
-
-### 1. Understand Upstream
-
-Examine the Rust source in `vendor/unicode-bidi/`:
-- Read the Rust documentation
-- Study test cases
-- Understand the API surface
-
-### 2. Update Inventory
-
-Before implementing, update the parity inventory:
+## Daily Workflow
 
 ```bash
-# Check current parity status
-./scripts/check_port_inventory.sh . plans/inventory/rust_port_inventory.tsv vendor/unicode-bidi rust
+make format     # Format code (crystal tool format)
+make lint       # Lint (format check + ameba)
+make test       # Run unit specs (92 examples)
+crystal spec    # Run full spec suite (123 examples including conformance)
 ```
 
-### 3. Implement in Crystal
+## Source Structure
 
-Follow Rust → Crystal mapping patterns:
-- Preserve behavior exactly
-- Use appropriate Crystal types
-- Add Crystal documentation
+| Dir | Purpose |
+|-----|---------|
+| `src/bidi/` | Crystal implementation — mirrors `vendor/unicode-bidi/src/` |
+| `vendor/unicode-bidi/` | Rust upstream (git submodule, v0.3.18) — source of truth |
+| `spec/` | Crystal test specs |
+| `spec/data/` | Conformance test data (`BidiTest.txt`, `BidiCharacterTest.txt`) |
+| `plans/inventory/` | Parity tracking manifests |
+| `plans/parity.md` | Feature checklist and work plan |
+| `scripts/` | Parity tooling (manifest gen, check, adversarial verify) |
+| `docs/` | Documentation |
+
+## Porting Workflow
+
+### 1. Study Upstream
+
+Read the Rust source in `vendor/unicode-bidi/src/`. Run the Rust tests:
+
+```bash
+cd vendor/unicode-bidi
+cargo test
+```
+
+### 2. Check Parity
+
+```bash
+./scripts/check_port_inventory.sh . plans/inventory/rust_port_inventory.tsv vendor/unicode-bidi rust
+./scripts/check_source_parity.sh . plans/inventory/rust_source_parity.tsv vendor/unicode-bidi rust
+./scripts/check_test_parity.sh . plans/inventory/rust_test_parity.tsv vendor/unicode-bidi rust
+```
+
+### 3. Implement
+
+Match Rust behavior exactly:
+- Same algorithm, same edge cases, same error conditions
+- Use `UInt8`, `Int32`, etc. for numeric types
+- Preserve API surface and method signatures
 
 ### 4. Port Tests
 
-For each Rust test, create a Crystal spec:
-- Copy test logic exactly
-- Use same test data/fixtures
-- Verify same expected outputs
+Crystal specs in `spec/` correspond to Rust `#[test]` functions:
+- `src/level.rs` → `spec/level_spec.cr`
+- `src/lib.rs` → `spec/info_spec.cr`
+- `src/prepare.rs` → `spec/prepare_spec.cr`
+- `src/char_data/mod.rs` → `spec/bidi_spec.cr`
+- `src/utf16.rs` → `spec/utf16_spec.cr`
 
-### 5. Verify Quality
+### 5. Update Inventory
+
+After porting, update `plans/inventory/rust_port_inventory.tsv` with `ported` status and `crystal_refs`.
+
+### 6. Verify
 
 ```bash
-make format  # Format code
-make lint    # Check formatting and lint
-make test    # Run tests
+make test
+crystal spec
+./scripts/verify_parity_adversarial.sh . vendor/unicode-bidi rust 'crystal spec' 'cargo test'
 ```
 
-## Testing Strategy
+## Conventions
 
-### Unit Tests
+- Follow existing patterns in `src/bidi/` — naming, struct layout, method visibility
+- Crystal `enum` for Rust `enum`, `struct` for `struct`
+- Rust `Vec<T>` → Crystal `Array(T)`
+- Rust `Option<T>` → Crystal `T?` or nil
+- Rust `Range<usize>` → Crystal `Range(Int32, Int32)`
+- Do not simplify algorithms; preserve stateful internals even if surface logic looks equivalent
 
-Port Rust unit tests (`#[test]` functions) to Crystal specs.
+## Debugging Discrepancies
 
-### Integration Tests
+1. Run the Rust test to see expected output
+2. Compare Crystal implementation line-by-line
+3. Check byte-vs-character indexing (Crystal `String#[]?` uses character indices)
+4. Check range end conventions (inclusive vs exclusive)
+5. Use `plans/parity.md` to check known issues
 
-Use upstream test data files:
-- `vendor/unicode-bidi/tests/data/BidiTest.txt`
-- `vendor/unicode-bidi/tests/data/BidiCharacterTest.txt`
+## Quality Gates
 
-### Property Tests
+All must pass before commit:
 
-Consider using Crystal's `spec` property testing for edge cases.
-
-## Debugging
-
-### Compare with Rust
-
-When debugging discrepancies:
-1. Run the Rust test to see expected behavior
-2. Compare with Crystal implementation
-3. Check type mappings and boundary conditions
-
-### Logging
-
-Add debug logging temporarily to understand data flow differences.
-
-## Code Review Checklist
-
-- [ ] Behavior matches upstream exactly
-- [ ] Tests are ported completely
-- [ ] Crystal idioms are used appropriately
-- [ ] Documentation is updated
-- [ ] Inventory status is current
-- [ ] Quality gates pass
+```bash
+make format && make lint && make test
+./scripts/verify_parity_adversarial.sh . vendor/unicode-bidi rust 'crystal spec' 'cargo test'
+```
